@@ -13,6 +13,9 @@ import { PublicRoadmapScreen } from '@/screens/customer/PublicRoadmapScreen';
 import { ReleaseNotesScreen } from '@/screens/customer/ReleaseNotesScreen';
 import { BoardScreen } from '@/screens/developer/BoardScreen';
 import { TriageInboxScreen } from '@/screens/developer/TriageInboxScreen';
+import { ItemDetailScreen } from '@/screens/developer/ItemDetailScreen';
+import { QAReleaseScreen } from '@/screens/developer/QAReleaseScreen';
+import { MySLAScreen } from '@/screens/developer/MySLAScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -60,9 +63,10 @@ export const router = createHashRouter([
             children: [
               { path: '/board', element: <BoardScreen /> },
               { path: '/triage', element: <TriageInboxScreen /> },
-              { path: '/my-items', element: <Placeholder title="My items" milestone="M2" /> },
-              { path: '/qa', element: <Placeholder title="QA & release" milestone="M2" /> },
-              { path: '/sla', element: <Placeholder title="My SLA" milestone="M2" /> },
+              { path: '/items/:id', element: <ItemDetailScreen /> },
+              { path: '/my-items', element: <MySLAScreen /> },
+              { path: '/qa', element: <QAReleaseScreen /> },
+              { path: '/sla', element: <MySLAScreen /> },
             ],
           },
           // PM / Manager (M3)

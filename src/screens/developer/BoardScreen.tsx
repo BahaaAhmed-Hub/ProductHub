@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { Avatar } from '@/components/ui/Avatar';
@@ -9,6 +10,7 @@ import type { BoardStatus } from '@/types/domain';
 
 /** Screen 10 — Developer kanban board with native drag-and-drop. */
 export function BoardScreen() {
+  const navigate = useNavigate();
   const { items, isLoading } = useBoardItems();
   const move = useMoveItem();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -94,6 +96,7 @@ export function BoardScreen() {
                       item={item}
                       onDragStart={() => setDragId(item.id)}
                       onDragEnd={() => setDragId(null)}
+                      onOpen={() => navigate(`/items/${item.id}`)}
                     />
                   ))}
                   {isLoading && <div className="text-xs text-label px-1 py-2">Loading…</div>}
@@ -111,10 +114,12 @@ function BoardCard({
   item,
   onDragStart,
   onDragEnd,
+  onOpen,
 }: {
   item: BoardItem;
   onDragStart: () => void;
   onDragEnd: () => void;
+  onOpen: () => void;
 }) {
   const critical = item.priority === 'critical';
   return (
@@ -122,6 +127,7 @@ function BoardCard({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onClick={onOpen}
       className={clsx(
         'bg-surface border-[0.5px] border-hairline rounded-[10px] p-2.5 flex flex-col gap-1.5 cursor-grab active:cursor-grabbing hover:shadow-frame',
         critical && 'border-l-2 border-l-danger',
