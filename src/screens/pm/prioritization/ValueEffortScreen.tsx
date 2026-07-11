@@ -3,11 +3,6 @@ import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
 import { useBoardItems } from '@/features/board/hooks';
 
-// Illustrative effort per ref (real effort comes from estimates/RICE effort).
-const EFFORT: Record<string, number> = {
-  'BUG-0042': 0.35, 'FEAT-0024': 0.7, 'BUG-0038': 0.25, 'QRY-0017': 0.2,
-  'BUG-0051': 0.55, 'FEAT-0031': 0.8,
-};
 const COLORS = ['#2FA869', '#46B6C9', '#7E78DD', '#E0644E', '#C49A3C', '#D97706'];
 
 /** Screen 54 — Value vs Effort 2×2 matrix. */
@@ -15,6 +10,7 @@ export function ValueEffortScreen() {
   const navigate = useNavigate();
   const { items } = useBoardItems();
   const maxRice = Math.max(1, ...items.map((i) => i.riceScore ?? 0));
+  const maxEffort = Math.max(1, ...items.map((i) => i.effort ?? 3));
 
   return (
     <>
@@ -57,7 +53,7 @@ export function ValueEffortScreen() {
             {/* bubbles */}
             {items.map((item, i) => {
               const value = (item.riceScore ?? 0) / maxRice; // 0..1 → y
-              const effort = EFFORT[item.ref] ?? 0.5; // 0..1 → x
+              const effort = (item.effort ?? 3) / maxEffort; // 0..1 → x
               const size = 34 + (item.riceScore ?? 0);
               return (
                 <div

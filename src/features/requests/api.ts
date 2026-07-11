@@ -55,6 +55,7 @@ function mapRow(r: RequestRow): CustomerRequest {
     status: toCustomerStatus(r.status),
     submittedByName: r.submitted_by?.name ?? 'You',
     submittedOn: fmtDate(r.created_at),
+    createdAt: r.created_at,
     updatedAgo: ago(r.created_at),
     attachments: [],
     conversation: [],

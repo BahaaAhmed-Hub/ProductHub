@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from 'recharts';
 import { TopNav } from '@/components/layout/TopNav';
 import { KPITile } from '@/components/ui/KPITile';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { useBoardItems } from '@/features/board/hooks';
+import { usePlanningActions } from '@/features/planning';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 const BURNDOWN = [
   { day: 'Mon', v: 31, done: false },
@@ -17,7 +21,18 @@ const BURNDOWN = [
 /** Screen 15 — PM dashboard. */
 export function DashboardScreen() {
   const { items } = useBoardItems();
+  const actions = usePlanningActions();
+  const [seeding, setSeeding] = useState(false);
   const done = items.filter((i) => i.boardStatus === 'released').length;
+
+  async function onSeed() {
+    setSeeding(true);
+    try {
+      await actions.seedWorkspace();
+    } finally {
+      setSeeding(false);
+    }
+  }
   const riceQueue = [...items]
     .filter((i) => i.riceScore != null)
     .sort((a, b) => (b.riceScore ?? 0) - (a.riceScore ?? 0))
@@ -25,7 +40,17 @@ export function DashboardScreen() {
 
   return (
     <>
-      <TopNav center={<span className="text-[13px] text-body">Dashboard</span>} notificationCount={4} />
+      <TopNav
+        center={<span className="text-[13px] text-body">Dashboard</span>}
+        actions={
+          isSupabaseConfigured && items.length === 0 ? (
+            <Button variant="secondary" icon="add" disabled={seeding} onClick={onSeed}>
+              {seeding ? 'Loading…' : 'Load sample data'}
+            </Button>
+          ) : undefined
+        }
+        notificationCount={4}
+      />
       <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
         <div className="grid grid-cols-4 gap-3">
           <KPITile label="Backlog size" value={42} sub="items unscheduled" />

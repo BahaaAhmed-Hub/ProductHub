@@ -10,6 +10,7 @@ interface BoardState {
   moveItem: (id: string, status: BoardStatus) => void;
   addToBoard: (t: TriageRequest) => void;
   setRice: (id: string, score: number) => void;
+  patch: (id: string, fields: Partial<BoardItem>) => void;
 }
 
 export const useBoardStore = create<BoardState>((set) => ({
@@ -27,4 +28,6 @@ export const useBoardStore = create<BoardState>((set) => ({
     })),
   setRice: (id, score) =>
     set((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, riceScore: score } : i)) })),
+  patch: (id, fields) =>
+    set((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, ...fields } : i)) })),
 }));

@@ -30,6 +30,7 @@ export interface CustomerRequest {
   plannedRelease?: string; // e.g. "Release 4.3 · Aug"
   submittedByName: string;
   submittedOn: string; // "Jun 24"
+  createdAt?: string; // ISO, for SLA computation
   updatedAgo: string; // "1d ago"
   slaLeft?: string; // "4h 12m left"
   attachments: RequestAttachment[];

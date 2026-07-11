@@ -16,14 +16,22 @@ interface ItemRow {
   priority: Priority;
   source_request_id: string | null;
   rice_score: number | null;
+  wsjf_score: number | null;
+  effort: number | null;
+  score_inputs: Record<string, unknown> | null;
+  swimlane: string | null;
+  release_id: string | null;
   plan_bucket: string | null;
   assignee: { name: string } | null;
 }
 
+const ITEM_SELECT =
+  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+
 export async function listBoardItems(): Promise<BoardItem[]> {
   const { data, error } = await supabase
     .from('backlog_items')
-    .select('id, ref, title, type, board_status, priority, source_request_id, rice_score, plan_bucket, assignee:profiles!backlog_items_assignee_id_fkey(name)')
+    .select(ITEM_SELECT)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data as unknown as ItemRow[]).map((r) => ({
@@ -37,8 +45,21 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     assigneeInitials: initials(r.assignee?.name),
     ...(r.source_request_id ? { sourceRequestId: r.source_request_id } : {}),
     ...(r.rice_score != null ? { riceScore: Number(r.rice_score) } : {}),
+    ...(r.wsjf_score != null ? { wsjfScore: Number(r.wsjf_score) } : {}),
+    ...(r.effort != null ? { effort: Number(r.effort) } : {}),
+    ...(r.score_inputs ? { scoreInputs: r.score_inputs } : {}),
+    ...(r.swimlane ? { swimlane: r.swimlane } : {}),
+    ...(r.release_id ? { releaseId: r.release_id } : {}),
     ...(r.plan_bucket ? { planBucket: r.plan_bucket } : {}),
   }));
+}
+
+export async function updateItemFields(
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.from('backlog_items').update(fields).eq('id', id);
+  if (error) throw error;
 }
 
 export async function updateBoardStatus(id: string, status: BoardStatus): Promise<void> {

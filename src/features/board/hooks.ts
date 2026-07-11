@@ -3,8 +3,20 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
-import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore } from './api';
+import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields } from './api';
 import type { BoardItem, TriageRequest } from './types';
+
+/** camelCase BoardItem fields → snake_case DB columns for updateItemFields. */
+const COLMAP: Record<string, string> = {
+  riceScore: 'rice_score',
+  wsjfScore: 'wsjf_score',
+  effort: 'effort',
+  scoreInputs: 'score_inputs',
+  swimlane: 'swimlane',
+  releaseId: 'release_id',
+  planBucket: 'plan_bucket',
+  boardStatus: 'board_status',
+};
 
 export function useBoardItems(): { items: BoardItem[]; isLoading: boolean } {
   const mock = useBoardStore((s) => s.items);
@@ -36,6 +48,21 @@ export function useUpdateRice() {
       return;
     }
     mockSet(id, score);
+  };
+}
+
+export function useUpdateItem() {
+  const qc = useQueryClient();
+  const patch = useBoardStore((s) => s.patch);
+  return async (id: string, fields: Partial<BoardItem>): Promise<void> => {
+    if (isSupabaseConfigured) {
+      const dbFields: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(fields)) dbFields[COLMAP[k] ?? k] = v;
+      await updateItemFields(id, dbFields);
+      await qc.invalidateQueries({ queryKey: ['board'] });
+      return;
+    }
+    patch(id, fields);
   };
 }
 

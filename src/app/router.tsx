@@ -22,13 +22,20 @@ import { AutomationsScreen } from '@/screens/pm/AutomationsScreen';
 import { PrioritizationHub } from '@/screens/pm/prioritization/PrioritizationHub';
 import { ValueEffortScreen } from '@/screens/pm/prioritization/ValueEffortScreen';
 import { MoscowScreen } from '@/screens/pm/prioritization/MoscowScreen';
+import { WSJFScreen } from '@/screens/pm/prioritization/WSJFScreen';
+import { CustomModelScreen } from '@/screens/pm/prioritization/CustomModelScreen';
+import { ResultsScreen } from '@/screens/pm/prioritization/ResultsScreen';
+import { ReleaseTreeScreen } from '@/screens/pm/ReleaseTreeScreen';
+import { SwimlanesScreen } from '@/screens/pm/SwimlanesScreen';
+import { SLABreachesScreen } from '@/screens/manager/SLABreachesScreen';
+import { TeamPerformanceScreen } from '@/screens/manager/TeamPerformanceScreen';
+import { ReportsScreen } from '@/screens/manager/ReportsScreen';
 import { RoleDashboard } from '@/screens/RoleDashboard';
 import { AnalyticsHome } from '@/screens/analytics/AnalyticsHome';
 import { IntegrationsScreen } from '@/screens/pm/IntegrationsScreen';
 import { ResearchHub } from '@/screens/pm/ResearchHub';
 import { StakeholderViewer } from '@/screens/stakeholder/StakeholderViewer';
 import { PlansScreen } from '@/screens/marketing/PlansScreen';
-import { Placeholder } from '@/screens/Placeholder';
 
 /**
  * Route table. M1 (Customer support flow) is fully implemented; Developer (M2)
@@ -96,22 +103,22 @@ export const router = createHashRouter([
               { path: '/intake', element: <TriageInboxScreen /> },
               { path: '/backlog', element: <BacklogScreen /> },
               // Manager oversight (M5)
-              { path: '/sla-breaches', element: <Placeholder title="SLA breaches" milestone="M5" /> },
-              { path: '/team', element: <Placeholder title="Team performance" milestone="M5" /> },
-              { path: '/reports', element: <Placeholder title="Reports" milestone="M5" /> },
+              { path: '/sla-breaches', element: <SLABreachesScreen /> },
+              { path: '/team', element: <TeamPerformanceScreen /> },
+              { path: '/reports', element: <ReportsScreen /> },
               { path: '/pm/roadmap', element: <RoadmapScreen /> },
-              { path: '/pm/releases', element: <Placeholder title="Release tree" milestone="M3" /> },
+              { path: '/pm/releases', element: <ReleaseTreeScreen /> },
               { path: '/sprints', element: <BoardScreen /> },
-              { path: '/swimlanes', element: <Placeholder title="Swimlanes" milestone="M3" /> },
+              { path: '/swimlanes', element: <SwimlanesScreen /> },
               { path: '/automations', element: <AutomationsScreen /> },
               { path: '/analytics', element: <AnalyticsHome /> },
               { path: '/research', element: <ResearchHub /> },
               { path: '/prioritize', element: <PrioritizationHub /> },
               { path: '/prioritize/value-effort', element: <ValueEffortScreen /> },
               { path: '/prioritize/moscow', element: <MoscowScreen /> },
-              { path: '/prioritize/wsjf', element: <Placeholder title="WSJF scoring" milestone="M4" /> },
-              { path: '/prioritize/custom', element: <Placeholder title="Custom model" milestone="M4" /> },
-              { path: '/prioritize/results', element: <Placeholder title="Prioritization results" milestone="M4" /> },
+              { path: '/prioritize/wsjf', element: <WSJFScreen /> },
+              { path: '/prioritize/custom', element: <CustomModelScreen /> },
+              { path: '/prioritize/results', element: <ResultsScreen /> },
               { path: '/integrations', element: <IntegrationsScreen /> },
             ],
           },

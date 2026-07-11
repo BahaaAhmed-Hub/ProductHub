@@ -11,6 +11,11 @@ export interface BoardItem {
   assigneeInitials?: string;
   sourceRequestId?: string;
   riceScore?: number;
+  wsjfScore?: number;
+  effort?: number;
+  scoreInputs?: Record<string, unknown>;
+  swimlane?: string;
+  releaseId?: string;
   planBucket?: string; // backlog | planned | in_cycle
 }
 

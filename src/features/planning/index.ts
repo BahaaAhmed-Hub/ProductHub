@@ -1,0 +1,168 @@
+import { create } from 'zustand';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useAuth } from '@/features/auth/AuthProvider';
+
+export interface Release {
+  id: string;
+  name: string;
+  status: string;
+  targetDate?: string;
+}
+export interface Sprint {
+  id: string;
+  name: string;
+  startsAt?: string;
+  endsAt?: string;
+  goal?: string;
+}
+export interface Criterion {
+  key: string;
+  label: string;
+  weight: number;
+}
+export interface PriModel {
+  id: string;
+  name: string;
+  criteria: Criterion[];
+}
+
+// ---------- mock fallback (local dev) ----------
+interface MockState {
+  releases: Release[];
+  sprints: Sprint[];
+  models: PriModel[];
+  addRelease: (name: string) => void;
+  addModel: (name: string, criteria: Criterion[]) => void;
+  removeModel: (id: string) => void;
+}
+const useMock = create<MockState>((set) => ({
+  releases: [
+    { id: 'rel-43', name: 'Release 4.3', status: 'on_track', targetDate: 'Aug 12' },
+    { id: 'rel-44', name: 'Release 4.4', status: 'planned', targetDate: 'Sep 9' },
+  ],
+  sprints: [{ id: 'sp-24', name: 'Sprint 24', startsAt: 'Jun 9', endsAt: 'Jun 23', goal: 'Enterprise reliability' }],
+  models: [
+    { id: 'm1', name: 'Q4 exec model', criteria: [
+      { key: 'revenue', label: 'Revenue impact', weight: 40 },
+      { key: 'effort', label: 'Effort (inverse)', weight: 30 },
+      { key: 'risk', label: 'Risk reduction', weight: 30 },
+    ] },
+  ],
+  addRelease: (name) => set((s) => ({ releases: [...s.releases, { id: `rel-${s.releases.length}`, name, status: 'planned' }] })),
+  addModel: (name, criteria) => set((s) => ({ models: [...s.models, { id: `m-${s.models.length + 1}`, name, criteria }] })),
+  removeModel: (id) => set((s) => ({ models: s.models.filter((m) => m.id !== id) })),
+}));
+
+// ---------- releases ----------
+export function useReleases(): { releases: Release[]; isLoading: boolean } {
+  const mock = useMock((s) => s.releases);
+  const q = useQuery({
+    queryKey: ['releases'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<Release[]> => {
+      const { data, error } = await supabase
+        .from('releases')
+        .select('id, name, status, target_date')
+        .order('target_date', { ascending: true });
+      if (error) throw error;
+      return (data as { id: string; name: string; status: string; target_date: string | null }[]).map((r) => ({
+        id: r.id, name: r.name, status: r.status, ...(r.target_date ? { targetDate: r.target_date } : {}),
+      }));
+    },
+  });
+  if (isSupabaseConfigured) return { releases: q.data ?? [], isLoading: q.isLoading };
+  return { releases: mock, isLoading: false };
+}
+
+export function useSprints(): Sprint[] {
+  const mock = useMock((s) => s.sprints);
+  const q = useQuery({
+    queryKey: ['sprints'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<Sprint[]> => {
+      const { data, error } = await supabase.from('sprints').select('id, name, starts_at, ends_at, goal');
+      if (error) throw error;
+      return (data as { id: string; name: string; starts_at: string | null; ends_at: string | null; goal: string | null }[]).map((s) => ({
+        id: s.id, name: s.name,
+        ...(s.starts_at ? { startsAt: s.starts_at } : {}),
+        ...(s.ends_at ? { endsAt: s.ends_at } : {}),
+        ...(s.goal ? { goal: s.goal } : {}),
+      }));
+    },
+  });
+  if (isSupabaseConfigured) return q.data ?? [];
+  return mock;
+}
+
+export function useModels(): { models: PriModel[]; isLoading: boolean } {
+  const mock = useMock((s) => s.models);
+  const q = useQuery({
+    queryKey: ['models'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<PriModel[]> => {
+      const { data, error } = await supabase.from('prioritization_models').select('id, name, criteria');
+      if (error) throw error;
+      return (data as { id: string; name: string; criteria: Criterion[] }[]).map((m) => ({
+        id: m.id, name: m.name, criteria: m.criteria ?? [],
+      }));
+    },
+  });
+  if (isSupabaseConfigured) return { models: q.data ?? [], isLoading: q.isLoading };
+  return { models: mock, isLoading: false };
+}
+
+export function usePlanningActions() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const mock = useMock();
+  const ws = user?.workspaceId;
+  return {
+    async addRelease(name: string) {
+      if (!isSupabaseConfigured) return mock.addRelease(name);
+      if (!ws) return;
+      const { error } = await supabase.from('releases').insert({ workspace_id: ws, name, status: 'planned' });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ['releases'] });
+    },
+    async addModel(name: string, criteria: Criterion[]) {
+      if (!isSupabaseConfigured) return mock.addModel(name, criteria);
+      if (!ws) return;
+      const { error } = await supabase.from('prioritization_models').insert({ workspace_id: ws, name, criteria });
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ['models'] });
+    },
+    async removeModel(id: string) {
+      if (!isSupabaseConfigured) return mock.removeModel(id);
+      const { error } = await supabase.from('prioritization_models').delete().eq('id', id);
+      if (error) throw error;
+      await qc.invalidateQueries({ queryKey: ['models'] });
+    },
+    /** Insert real sample records (releases, sprint, scored backlog) into the workspace. */
+    async seedWorkspace() {
+      if (!isSupabaseConfigured || !ws) return;
+      const { count } = await supabase
+        .from('backlog_items')
+        .select('id', { count: 'exact', head: true });
+      if ((count ?? 0) > 0) return; // already has data
+      await supabase.from('sprints').insert({ workspace_id: ws, name: 'Sprint 24' });
+      await supabase.from('releases').insert([
+        { workspace_id: ws, name: 'Release 4.3', status: 'on_track' },
+        { workspace_id: ws, name: 'Release 4.4', status: 'planned' },
+      ]);
+      await supabase.from('backlog_items').insert([
+        { workspace_id: ws, ref: 'BUG-0042', title: 'API rate limit not applying to enterprise tier', type: 'bug', board_status: 'in_development', priority: 'critical', rice_score: 18.4, wsjf_score: 8.0, effort: 3, swimlane: 'Platform', plan_bucket: 'in_cycle' },
+        { workspace_id: ws, ref: 'FEAT-0024', title: 'SSO integration with Azure AD', type: 'feature', board_status: 'in_development', priority: 'high', rice_score: 14.2, wsjf_score: 3.8, effort: 5, swimlane: 'Platform', plan_bucket: 'in_cycle' },
+        { workspace_id: ws, ref: 'BUG-0038', title: 'Export to CSV missing timezone column', type: 'bug', board_status: 'triaged', priority: 'medium', rice_score: 12.1, wsjf_score: 6.0, effort: 2, swimlane: 'Reports', plan_bucket: 'planned' },
+        { workspace_id: ws, ref: 'BUG-0051', title: 'Webhook retries not respecting exponential backoff', type: 'bug', board_status: 'in_qa', priority: 'high', rice_score: 9.7, wsjf_score: 4.8, effort: 4, swimlane: 'Integrations', plan_bucket: 'planned' },
+        { workspace_id: ws, ref: 'QRY-0017', title: 'Can we get a dedicated instance in EU region?', type: 'query', board_status: 'triaged', priority: 'low', rice_score: 6.4, wsjf_score: 2.3, effort: 3, swimlane: 'Platform', plan_bucket: 'backlog' },
+        { workspace_id: ws, ref: 'FEAT-0031', title: 'Custom SLA tiers per environment', type: 'feature', board_status: 'released', priority: 'medium', rice_score: 8.3, wsjf_score: 2.6, effort: 5, swimlane: 'Reports', plan_bucket: 'backlog' },
+      ]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['board'] }),
+        qc.invalidateQueries({ queryKey: ['releases'] }),
+        qc.invalidateQueries({ queryKey: ['sprints'] }),
+      ]);
+    },
+  };
+}
