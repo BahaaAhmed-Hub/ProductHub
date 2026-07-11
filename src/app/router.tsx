@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createHashRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { CustomerLayout } from '@/components/layout/CustomerLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -18,7 +18,7 @@ import { Placeholder } from '@/screens/Placeholder';
  * and PM (M3) surfaces are stubbed with milestone-tagged placeholders so the
  * role-routing shell is walkable end-to-end today.
  */
-export const router = createBrowserRouter([
+export const router = createHashRouter([
   { path: '/signin', element: <SignInScreen /> },
   {
     element: <RequireAuth />,

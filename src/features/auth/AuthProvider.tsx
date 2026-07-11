@@ -30,9 +30,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // Mock mode: restore last-selected role, else default to PM.
-      const saved = (localStorage.getItem(MOCK_ROLE_KEY) as Role | null) ?? 'pm';
-      setUser(MOCK_USERS[saved] ?? MOCK_USERS.pm);
+      // Mock mode: restore last-selected role, else default to Customer
+      // (lands the demo on the fully-built support flow, not a placeholder).
+      const saved = (localStorage.getItem(MOCK_ROLE_KEY) as Role | null) ?? 'customer';
+      setUser(MOCK_USERS[saved] ?? MOCK_USERS.customer);
       setLoading(false);
       return;
     }
