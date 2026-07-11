@@ -6,9 +6,47 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import type { Role, User } from '@/types/domain';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { MOCK_USERS } from './mockUsers';
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+/** Resolve the ProductHub profile (role, workspace) for an authenticated session. */
+async function resolveProfile(session: Session | null): Promise<User | null> {
+  if (!session) return null;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, workspace_id, name, email, role, avatar_url')
+    .eq('auth_uid', session.user.id)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as {
+    id: string;
+    workspace_id: string;
+    name: string;
+    email: string;
+    role: Role;
+    avatar_url: string | null;
+  };
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    initials: initialsOf(row.name),
+    ...(row.avatar_url ? { avatarUrl: row.avatar_url } : {}),
+  };
+}
 
 interface AuthState {
   user: User | null;
@@ -37,13 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      // TODO(M1): resolve the profile row (role, workspace) for data.session.user.
-      setUser(data.session ? MOCK_USERS.pm : null);
+    supabase.auth.getSession().then(async ({ data }) => {
+      setUser(await resolveProfile(data.session));
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session ? MOCK_USERS.pm : null);
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, session) => {
+      setUser(await resolveProfile(session));
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -55,15 +92,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mockMode: !isSupabaseConfigured,
       async signInWithPassword(email, password) {
         if (!isSupabaseConfigured) {
-          setUser(MOCK_USERS.pm);
+          setUser(MOCK_USERS.customer);
           return;
         }
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        const profile = await resolveProfile(data.session);
+        if (!profile) throw new Error('Signed in, but no workspace profile is linked to this account.');
+        setUser(profile);
       },
       async signInWithGoogle() {
         if (!isSupabaseConfigured) {
-          setUser(MOCK_USERS.pm);
+          setUser(MOCK_USERS.customer);
           return;
         }
         const { error } = await supabase.auth.signInWithOAuth({

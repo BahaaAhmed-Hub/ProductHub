@@ -31,6 +31,11 @@ jobs:
           enablement: true
       - run: npm ci
       - run: npm run build
+        env:
+          # Supabase anon key is a public client key (RLS-protected) — safe to
+          # embed in a static build. Not a secret.
+          VITE_SUPABASE_URL: https://cgitrswstyamfoialkbw.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNnaXRyc3dzdHlhbWZvaWFsa2J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3ODYxNzQsImV4cCI6MjA5OTM2MjE3NH0.E6K-VGQhVrm34fg3vTahQpPtTmUuTcaiYmS-NxJrlHo
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

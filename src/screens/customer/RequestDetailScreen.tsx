@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
 import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
-import { useRequestsStore } from '@/features/requests/store';
+import { useRequest } from '@/features/requests/hooks';
 import type { CustomerStatus } from '@/features/requests/types';
 
 const STEPS: { key: string; label: string }[] = [
@@ -23,7 +23,7 @@ const CURRENT_INDEX: Record<CustomerStatus, number> = {
 
 export function RequestDetailScreen() {
   const { id } = useParams();
-  const request = useRequestsStore((s) => s.requests.find((r) => r.id === id));
+  const request = useRequest(id);
   const [reply, setReply] = useState('');
 
   if (!request) {

@@ -6,6 +6,7 @@ import { Segmented } from '@/components/ui/Segmented';
 import { TypeTag } from '@/components/ui/Tag';
 import { StatusBadge } from '@/features/requests/StatusBadge';
 import { useRequestsStore } from '@/features/requests/store';
+import { useRequests, useArchiveRequests } from '@/features/requests/hooks';
 import type { CustomerRequest } from '@/features/requests/types';
 import type { RequestType } from '@/types/domain';
 
@@ -13,9 +14,16 @@ type View = 'list' | 'by_type';
 
 export function MyRequestsScreen() {
   const navigate = useNavigate();
-  const { requests, selected, toggleSelected, clearSelected, archiveSelected } = useRequestsStore();
+  const { requests, isLoading } = useRequests();
+  const { selected, toggleSelected, clearSelected } = useRequestsStore();
+  const archive = useArchiveRequests();
   const [view, setView] = useState<View>('list');
   const openCount = requests.filter((r) => r.status !== 'resolved').length;
+
+  async function onArchive() {
+    await archive([...selected]);
+    clearSelected();
+  }
 
   const groups: { type: RequestType; label: string; rows: CustomerRequest[] }[] = (
     ['bug', 'feature', 'query'] as RequestType[]
@@ -52,7 +60,7 @@ export function MyRequestsScreen() {
             </button>
           </div>
           <button
-            onClick={archiveSelected}
+            onClick={onArchive}
             className="inline-flex items-center gap-1.5 text-[13px] font-medium text-danger hover:opacity-80"
           >
             <Icon name="archive" size={16} /> Archive selected
@@ -72,18 +80,31 @@ export function MyRequestsScreen() {
           <span className="text-right">Submitted</span>
         </div>
 
-        {view === 'list' ? (
-          requests.map((r) => (
-            <RequestRow
-              key={r.id}
-              r={r}
-              selected={selected.has(r.id)}
-              onToggle={() => toggleSelected(r.id)}
-              onOpen={() => navigate(`/requests/${r.id}`)}
-            />
-          ))
-        ) : (
-          <div className="flex flex-col gap-6 mt-2">
+        {isLoading && (
+          <div className="py-12 text-center text-sm text-body">Loading requests…</div>
+        )}
+        {!isLoading && requests.length === 0 && (
+          <div className="py-12 text-center text-sm text-body">
+            No requests yet.{' '}
+            <span className="text-accent cursor-pointer" onClick={() => navigate('/submit')}>
+              Submit your first request
+            </span>
+          </div>
+        )}
+        {!isLoading &&
+          requests.length > 0 &&
+          (view === 'list' ? (
+            requests.map((r) => (
+              <RequestRow
+                key={r.id}
+                r={r}
+                selected={selected.has(r.id)}
+                onToggle={() => toggleSelected(r.id)}
+                onOpen={() => navigate(`/requests/${r.id}`)}
+              />
+            ))
+          ) : (
+            <div className="flex flex-col gap-6 mt-2">
             {groups
               .filter((g) => g.rows.length > 0)
               .map((g) => (
@@ -104,8 +125,8 @@ export function MyRequestsScreen() {
                   ))}
                 </div>
               ))}
-          </div>
-        )}
+            </div>
+          ))}
       </div>
     </div>
   );

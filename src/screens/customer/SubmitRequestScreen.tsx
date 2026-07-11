@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { Eyebrow } from '@/components/ui/Card';
 import type { Priority, RequestType } from '@/types/domain';
-import { useRequestsStore } from '@/features/requests/store';
+import { useCreateRequest } from '@/features/requests/hooks';
 
 const TYPES: { value: RequestType; label: string; icon: string }[] = [
   { value: 'bug', label: 'Bug', icon: 'bug_report' },
@@ -30,7 +30,9 @@ const SLA_BY_PRIORITY: Record<Priority, string> = {
 
 export function SubmitRequestScreen() {
   const navigate = useNavigate();
-  const addRequest = useRequestsStore((s) => s.addRequest);
+  const createRequest = useCreateRequest();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState<RequestType>('bug');
   const [subject, setSubject] = useState('API rate limit not applying to enterprise tier');
   const [description, setDescription] = useState(
@@ -40,10 +42,17 @@ export function SubmitRequestScreen() {
   const [product, setProduct] = useState('API Gateway');
   const [attachments, setAttachments] = useState([{ name: 'rate-limit-trace.har', size: '248 KB' }]);
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const created = addRequest({ type, subject, description, priority, product, attachments });
-    navigate('/submitted', { state: { ref: created.ref, priority: created.priority } });
+    setSubmitting(true);
+    setError(null);
+    try {
+      const created = await createRequest({ type, subject, description, priority, product, attachments });
+      navigate('/submitted', { state: { ref: created.ref, priority: created.priority } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not submit request');
+      setSubmitting(false);
+    }
   }
 
   const fieldLabel = 'grid grid-cols-2 gap-6';
@@ -185,12 +194,16 @@ export function SubmitRequestScreen() {
           </div>
         </div>
 
+        {error && <div className="text-[13px] text-danger">{error}</div>}
+
         <div className="flex items-center justify-between border-t-[0.5px] border-hairline pt-5">
           <span className="inline-flex items-center gap-1.5 text-[13px] text-body">
             <Icon name="schedule" size={15} className="text-label" />
             <span className="capitalize">{priority} priority</span> · {SLA_BY_PRIORITY[priority]}
           </span>
-          <Button type="submit">Submit request</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Submitting…' : 'Submit request'}
+          </Button>
         </div>
       </form>
     </div>
