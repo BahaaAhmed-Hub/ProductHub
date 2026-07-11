@@ -24,6 +24,9 @@ import { ValueEffortScreen } from '@/screens/pm/prioritization/ValueEffortScreen
 import { MoscowScreen } from '@/screens/pm/prioritization/MoscowScreen';
 import { RoleDashboard } from '@/screens/RoleDashboard';
 import { AnalyticsHome } from '@/screens/analytics/AnalyticsHome';
+import { IntegrationsScreen } from '@/screens/pm/IntegrationsScreen';
+import { ResearchHub } from '@/screens/pm/ResearchHub';
+import { StakeholderViewer } from '@/screens/stakeholder/StakeholderViewer';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -61,6 +64,12 @@ export const router = createHashRouter([
         ],
       },
 
+      // ---- Stakeholder (read-only viewer) ----
+      {
+        element: <RequireRole roles={['stakeholder']} />,
+        children: [{ path: '/viewer', element: <StakeholderViewer /> }],
+      },
+
       // ---- Internal roles: sidebar shell ----
       {
         element: <AppShell />,
@@ -94,14 +103,14 @@ export const router = createHashRouter([
               { path: '/swimlanes', element: <Placeholder title="Swimlanes" milestone="M3" /> },
               { path: '/automations', element: <AutomationsScreen /> },
               { path: '/analytics', element: <AnalyticsHome /> },
-              { path: '/research', element: <Placeholder title="Research hub" milestone="M7" /> },
+              { path: '/research', element: <ResearchHub /> },
               { path: '/prioritize', element: <PrioritizationHub /> },
               { path: '/prioritize/value-effort', element: <ValueEffortScreen /> },
               { path: '/prioritize/moscow', element: <MoscowScreen /> },
               { path: '/prioritize/wsjf', element: <Placeholder title="WSJF scoring" milestone="M4" /> },
               { path: '/prioritize/custom', element: <Placeholder title="Custom model" milestone="M4" /> },
               { path: '/prioritize/results', element: <Placeholder title="Prioritization results" milestone="M4" /> },
-              { path: '/integrations', element: <Placeholder title="Integrations" milestone="M8" /> },
+              { path: '/integrations', element: <IntegrationsScreen /> },
             ],
           },
         ],
