@@ -35,26 +35,30 @@ jobs:
           fi
           psql --version
 
-      - name: Apply schema (0001) — tolerant of re-runs
+      - name: Apply all migrations in order
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          echo "== 0001_init.sql (schema) =="
-          # No ON_ERROR_STOP: on a re-run, "type/table already exists" is harmless.
+          set -e
+          echo "== 0001_init.sql (schema — tolerant of re-runs) =="
+          # 0001 isn't idempotent (create type/table); on a re-run "already exists"
+          # is harmless, so don't stop on it.
           psql "$DB_URL" -f supabase/migrations/0001_init.sql || true
-
-      - name: Apply seed (0002) — must succeed
-        env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          echo "== 0002_seed.sql (seed + demo users) =="
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0002_seed.sql
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            case "$f" in *0001_init.sql) continue ;; esac
+            echo "== $f =="
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
 
       - name: Verify
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          echo "profiles:"; psql "$DB_URL" -Atc "select role, email from profiles order by role;"
-          echo "requests:"; psql "$DB_URL" -Atc "select count(*) from requests;"
+          echo "profiles (expect 0 after cleanup):"
+          psql "$DB_URL" -Atc "select count(*) from profiles;"
+          echo "requests (expect 0 after cleanup):"
+          psql "$DB_URL" -Atc "select count(*) from requests;"
+          echo "orgs (expect 0):"
+          psql "$DB_URL" -Atc "select count(*) from orgs;"
 
-# trigger: apply migrations (secret now set)
+# trigger: apply migrations

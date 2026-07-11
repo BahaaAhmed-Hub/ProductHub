@@ -108,7 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: window.location.origin },
+          // Return to the app root (strip any hash route). PKCE flow returns a
+          // ?code= query param, which HashRouter ignores and supabase-js exchanges.
+          options: { redirectTo: window.location.href.split('#')[0] },
         });
         if (error) throw error;
       },

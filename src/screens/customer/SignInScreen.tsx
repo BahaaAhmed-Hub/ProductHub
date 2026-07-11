@@ -8,8 +8,8 @@ import { useAuth } from '@/features/auth/AuthProvider';
 export function SignInScreen() {
   const { signInWithPassword, signInWithGoogle, mockMode } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState(mockMode ? 'maya.t@orioncloud.com' : 'customer@orioncloud.com');
-  const [password, setPassword] = useState(mockMode ? '' : 'producthub123');
+  const [email, setEmail] = useState(mockMode ? 'maya.t@orioncloud.com' : '');
+  const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,26 +112,9 @@ export function SignInScreen() {
             Mock mode — Supabase not configured. Any credentials sign you in.
           </p>
         ) : (
-          <div className="mt-5 pt-4 border-t-[0.5px] border-hairline">
-            <div className="text-[10px] font-medium uppercase tracking-wide text-label text-center mb-2">
-              Demo accounts · password producthub123
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              {['customer', 'developer', 'pm'].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => {
-                    setEmail(`${r}@orioncloud.com`);
-                    setPassword('producthub123');
-                  }}
-                  className="text-[11px] capitalize px-3 h-7 rounded-full border-[0.5px] border-hairline text-body hover:bg-[#F4F3F0]"
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="mt-5 text-[11px] text-label text-center">
+            New here? Continue with Google to create your workspace.
+          </p>
         )}
       </div>
     </div>
