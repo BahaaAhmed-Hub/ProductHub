@@ -50,8 +50,8 @@ export const NAV: Record<Role, NavSection[]> = {
       items: [
         { label: 'Triage Inbox', icon: 'move_to_inbox', path: '/intake', badge: 'triage' },
         { label: 'Backlog', icon: 'format_list_bulleted', path: '/backlog' },
-        { label: 'Roadmap', icon: 'map', path: '/roadmap' },
-        { label: 'Release Tree', icon: 'account_tree', path: '/releases' },
+        { label: 'Roadmap', icon: 'map', path: '/pm/roadmap' },
+        { label: 'Release Tree', icon: 'account_tree', path: '/pm/releases' },
         { label: 'Sprint / Cycles', icon: 'sprint', path: '/sprints' },
         { label: 'Swimlanes', icon: 'view_week', path: '/swimlanes' },
         { label: 'Automations', icon: 'bolt', path: '/automations' },

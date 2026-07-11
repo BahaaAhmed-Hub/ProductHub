@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { DevRoleSwitcher } from './DevRoleSwitcher';
 
 /**
  * Two-part shell used by all internal role surfaces: a fixed left Sidebar
@@ -13,6 +14,7 @@ export function AppShell() {
       <main className="flex-1 flex flex-col min-w-0">
         <Outlet />
       </main>
+      <DevRoleSwitcher />
     </div>
   );
 }

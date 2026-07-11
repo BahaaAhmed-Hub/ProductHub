@@ -1,14 +1,22 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
+import { CustomerLayout } from '@/components/layout/CustomerLayout';
+import { PublicLayout } from '@/components/layout/PublicLayout';
 import { RequireAuth, RequireRole } from '@/features/auth/guards';
 import { RoleIndex } from '@/features/auth/RoleIndex';
 import { SignInScreen } from '@/screens/customer/SignInScreen';
+import { SubmitRequestScreen } from '@/screens/customer/SubmitRequestScreen';
+import { ConfirmationScreen } from '@/screens/customer/ConfirmationScreen';
+import { MyRequestsScreen } from '@/screens/customer/MyRequestsScreen';
+import { RequestDetailScreen } from '@/screens/customer/RequestDetailScreen';
+import { PublicRoadmapScreen } from '@/screens/customer/PublicRoadmapScreen';
+import { ReleaseNotesScreen } from '@/screens/customer/ReleaseNotesScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
- * Route table. v1 (M0–M3) implements Customer / Developer / PM surfaces.
- * Screens not yet built render <Placeholder> with their milestone tag so the
- * nav + role routing shell is fully walkable today.
+ * Route table. M1 (Customer support flow) is fully implemented; Developer (M2)
+ * and PM (M3) surfaces are stubbed with milestone-tagged placeholders so the
+ * role-routing shell is walkable end-to-end today.
  */
 export const router = createBrowserRouter([
   { path: '/signin', element: <SignInScreen /> },
@@ -16,18 +24,34 @@ export const router = createBrowserRouter([
     element: <RequireAuth />,
     children: [
       { path: '/', element: <RoleIndex /> },
+
+      // ---- Customer (M1) ----
+      {
+        element: <RequireRole roles={['customer']} />,
+        children: [
+          {
+            element: <CustomerLayout />,
+            children: [
+              { path: '/submit', element: <SubmitRequestScreen /> },
+              { path: '/requests', element: <MyRequestsScreen /> },
+              { path: '/requests/:id', element: <RequestDetailScreen /> },
+            ],
+          },
+          { path: '/submitted', element: <ConfirmationScreen /> },
+          {
+            element: <PublicLayout />,
+            children: [
+              { path: '/roadmap', element: <PublicRoadmapScreen /> },
+              { path: '/releases', element: <ReleaseNotesScreen /> },
+            ],
+          },
+        ],
+      },
+
+      // ---- Internal roles: sidebar shell ----
       {
         element: <AppShell />,
         children: [
-          // Customer (M1)
-          {
-            element: <RequireRole roles={['customer']} />,
-            children: [
-              { path: '/submit', element: <Placeholder title="Submit request" milestone="M1" /> },
-              { path: '/requests', element: <Placeholder title="My requests" milestone="M1" /> },
-              { path: '/requests/:id', element: <Placeholder title="Request detail" milestone="M1" /> },
-            ],
-          },
           // Developer (M2)
           {
             element: <RequireRole roles={['developer']} />,
@@ -39,15 +63,15 @@ export const router = createBrowserRouter([
               { path: '/sla', element: <Placeholder title="My SLA" milestone="M2" /> },
             ],
           },
-          // PM (M3)
+          // PM / Manager (M3)
           {
             element: <RequireRole roles={['pm', 'manager']} />,
             children: [
               { path: '/dashboard', element: <Placeholder title="Dashboard" milestone="M3" /> },
               { path: '/intake', element: <Placeholder title="Intake" milestone="M3" /> },
               { path: '/backlog', element: <Placeholder title="Backlog" milestone="M3" /> },
-              { path: '/roadmap', element: <Placeholder title="Roadmap" milestone="M3" /> },
-              { path: '/releases', element: <Placeholder title="Release tree" milestone="M3" /> },
+              { path: '/pm/roadmap', element: <Placeholder title="Roadmap" milestone="M3" /> },
+              { path: '/pm/releases', element: <Placeholder title="Release tree" milestone="M3" /> },
               { path: '/sprints', element: <Placeholder title="Sprints" milestone="M3" /> },
               { path: '/swimlanes', element: <Placeholder title="Swimlanes" milestone="M3" /> },
               { path: '/automations', element: <Placeholder title="Automations" milestone="M3" /> },

@@ -1,6 +1,5 @@
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
-import { DevRoleSwitcher } from '@/components/layout/DevRoleSwitcher';
 
 /** Temporary screen for routes whose real implementation lands in a later milestone. */
 export function Placeholder({ title, milestone }: { title: string; milestone: string }) {
@@ -19,7 +18,6 @@ export function Placeholder({ title, milestone }: { title: string; milestone: st
           </div>
         </div>
       </div>
-      <DevRoleSwitcher />
     </>
   );
 }
