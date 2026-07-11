@@ -27,6 +27,7 @@ import { AnalyticsHome } from '@/screens/analytics/AnalyticsHome';
 import { IntegrationsScreen } from '@/screens/pm/IntegrationsScreen';
 import { ResearchHub } from '@/screens/pm/ResearchHub';
 import { StakeholderViewer } from '@/screens/stakeholder/StakeholderViewer';
+import { PlansScreen } from '@/screens/marketing/PlansScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -36,6 +37,7 @@ import { Placeholder } from '@/screens/Placeholder';
  */
 export const router = createHashRouter([
   { path: '/signin', element: <SignInScreen /> },
+  { path: '/plans', element: <PlansScreen /> },
   {
     element: <RequireAuth />,
     children: [
