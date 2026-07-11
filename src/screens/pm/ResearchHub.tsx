@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { Tag } from '@/components/ui/Tag';
+import { summarizeFeedback } from '@/features/ai';
 
 const ARTIFACTS = [
   { kind: 'Survey', title: 'Q3 NPS survey', meta: '412 responses · NPS 41', icon: 'summarize', tone: 'accent' as const },
@@ -10,8 +12,28 @@ const ARTIFACTS = [
   { kind: 'Agent run', title: 'Competitor pricing scan', meta: 'Autonomous · 6 sources', icon: 'science', tone: 'success' as const },
 ];
 
+const DEFAULT_SUMMARY =
+  'Across 412 survey responses and 18 interviews, the top themes are: (1) enterprise SSO is a blocker for 3 deals, (2) CSV export gaps hurt daily reporting, (3) power users want bulk actions. SSO and rate-limit reliability map directly to two "Now" roadmap items.';
+
 /** Screen 44 — PM research hub. */
 export function ResearchHub() {
+  const [summary, setSummary] = useState(DEFAULT_SUMMARY);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSummarize() {
+    setLoading(true);
+    setError(null);
+    try {
+      const s = await summarizeFeedback();
+      if (s) setSummary(s);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'AI summary failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <>
       <TopNav center={<span className="text-[13px] text-body">Research</span>} notificationCount={4} />
@@ -23,7 +45,9 @@ export function ResearchHub() {
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" icon="add">New survey</Button>
-            <Button icon="auto_awesome">Summarize feedback</Button>
+            <Button icon="auto_awesome" disabled={loading} onClick={onSummarize}>
+              {loading ? 'Summarizing…' : 'Summarize feedback'}
+            </Button>
           </div>
         </div>
 
@@ -43,14 +67,14 @@ export function ResearchHub() {
         </div>
 
         <Card className="p-5 mt-4 bg-ai-surface border-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-ai-accent mb-2">
-            <Icon name="auto_awesome" size={14} /> AI FEEDBACK SUMMARY
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-ai-accent">
+              <Icon name="auto_awesome" size={14} /> AI FEEDBACK SUMMARY
+            </div>
+            {loading && <span className="text-[11px] text-ai-accent">Generating…</span>}
           </div>
-          <p className="text-[13px] text-ink leading-relaxed max-w-3xl">
-            Across 412 survey responses and 18 interviews, the top themes are: (1) enterprise SSO is a
-            blocker for 3 deals, (2) CSV export gaps hurt daily reporting, (3) power users want bulk actions.
-            SSO and rate-limit reliability map directly to two "Now" roadmap items.
-          </p>
+          <p className="text-[13px] text-ink leading-relaxed max-w-3xl whitespace-pre-line">{summary}</p>
+          {error && <p className="text-[12px] text-danger mt-2">{error}</p>}
           <div className="mt-3">
             <Button variant="secondary" icon="north_east">Link to roadmap evidence</Button>
           </div>
