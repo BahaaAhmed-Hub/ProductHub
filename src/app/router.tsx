@@ -16,13 +16,14 @@ import { TriageInboxScreen } from '@/screens/developer/TriageInboxScreen';
 import { ItemDetailScreen } from '@/screens/developer/ItemDetailScreen';
 import { QAReleaseScreen } from '@/screens/developer/QAReleaseScreen';
 import { MySLAScreen } from '@/screens/developer/MySLAScreen';
-import { DashboardScreen } from '@/screens/pm/DashboardScreen';
 import { BacklogScreen } from '@/screens/pm/BacklogScreen';
 import { RoadmapScreen } from '@/screens/pm/RoadmapScreen';
 import { AutomationsScreen } from '@/screens/pm/AutomationsScreen';
 import { PrioritizationHub } from '@/screens/pm/prioritization/PrioritizationHub';
 import { ValueEffortScreen } from '@/screens/pm/prioritization/ValueEffortScreen';
 import { MoscowScreen } from '@/screens/pm/prioritization/MoscowScreen';
+import { RoleDashboard } from '@/screens/RoleDashboard';
+import { AnalyticsHome } from '@/screens/analytics/AnalyticsHome';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -80,15 +81,19 @@ export const router = createHashRouter([
           {
             element: <RequireRole roles={['pm', 'manager']} />,
             children: [
-              { path: '/dashboard', element: <DashboardScreen /> },
+              { path: '/dashboard', element: <RoleDashboard /> },
               { path: '/intake', element: <TriageInboxScreen /> },
               { path: '/backlog', element: <BacklogScreen /> },
+              // Manager oversight (M5)
+              { path: '/sla-breaches', element: <Placeholder title="SLA breaches" milestone="M5" /> },
+              { path: '/team', element: <Placeholder title="Team performance" milestone="M5" /> },
+              { path: '/reports', element: <Placeholder title="Reports" milestone="M5" /> },
               { path: '/pm/roadmap', element: <RoadmapScreen /> },
               { path: '/pm/releases', element: <Placeholder title="Release tree" milestone="M3" /> },
               { path: '/sprints', element: <BoardScreen /> },
               { path: '/swimlanes', element: <Placeholder title="Swimlanes" milestone="M3" /> },
               { path: '/automations', element: <AutomationsScreen /> },
-              { path: '/analytics', element: <Placeholder title="Analytics (Lens)" milestone="M6" /> },
+              { path: '/analytics', element: <AnalyticsHome /> },
               { path: '/research', element: <Placeholder title="Research hub" milestone="M7" /> },
               { path: '/prioritize', element: <PrioritizationHub /> },
               { path: '/prioritize/value-effort', element: <ValueEffortScreen /> },
