@@ -20,6 +20,9 @@ import { DashboardScreen } from '@/screens/pm/DashboardScreen';
 import { BacklogScreen } from '@/screens/pm/BacklogScreen';
 import { RoadmapScreen } from '@/screens/pm/RoadmapScreen';
 import { AutomationsScreen } from '@/screens/pm/AutomationsScreen';
+import { PrioritizationHub } from '@/screens/pm/prioritization/PrioritizationHub';
+import { ValueEffortScreen } from '@/screens/pm/prioritization/ValueEffortScreen';
+import { MoscowScreen } from '@/screens/pm/prioritization/MoscowScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -87,7 +90,12 @@ export const router = createHashRouter([
               { path: '/automations', element: <AutomationsScreen /> },
               { path: '/analytics', element: <Placeholder title="Analytics (Lens)" milestone="M6" /> },
               { path: '/research', element: <Placeholder title="Research hub" milestone="M7" /> },
-              { path: '/prioritize', element: <Placeholder title="Prioritization" milestone="M4" /> },
+              { path: '/prioritize', element: <PrioritizationHub /> },
+              { path: '/prioritize/value-effort', element: <ValueEffortScreen /> },
+              { path: '/prioritize/moscow', element: <MoscowScreen /> },
+              { path: '/prioritize/wsjf', element: <Placeholder title="WSJF scoring" milestone="M4" /> },
+              { path: '/prioritize/custom', element: <Placeholder title="Custom model" milestone="M4" /> },
+              { path: '/prioritize/results', element: <Placeholder title="Prioritization results" milestone="M4" /> },
               { path: '/integrations', element: <Placeholder title="Integrations" milestone="M8" /> },
             ],
           },
