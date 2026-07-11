@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, AlertCircle, ChevronDown, Puzzle, List, Users,
   CircleHelp, Inbox, LineChart, Flame, LogOut, Map, Mic, Bell, Clock,
   FlaskConical, Search, Repeat, ScrollText, SlidersHorizontal, TrendingUp,
-  TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff,
+  TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -45,6 +45,7 @@ const MAP: Record<string, LucideIcon> = {
   map: Map,
   mic: Mic,
   move_to_inbox: Inbox,
+  north_east: ArrowUpRight,
   notifications: Bell,
   schedule: Clock,
   science: FlaskConical,

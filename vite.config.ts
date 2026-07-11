@@ -9,6 +9,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    // Force a single React instance (recharts/others otherwise pull a second
+    // copy → "Cannot read properties of null (reading 'useRef')").
+    dedupe: ['react', 'react-dom'],
   },
   server: { port: 5173 },
 });

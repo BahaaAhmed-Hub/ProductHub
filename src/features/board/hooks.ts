@@ -3,7 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
-import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus } from './api';
+import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore } from './api';
 import type { BoardItem, TriageRequest } from './types';
 
 export function useBoardItems(): { items: BoardItem[]; isLoading: boolean } {
@@ -23,6 +23,19 @@ export function useMoveItem() {
       return;
     }
     mockMove(id, status);
+  };
+}
+
+export function useUpdateRice() {
+  const qc = useQueryClient();
+  const mockSet = useBoardStore((s) => s.setRice);
+  return async (id: string, score: number): Promise<void> => {
+    if (isSupabaseConfigured) {
+      await updateRiceScore(id, score);
+      await qc.invalidateQueries({ queryKey: ['board'] });
+      return;
+    }
+    mockSet(id, score);
   };
 }
 

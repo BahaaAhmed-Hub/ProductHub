@@ -10,6 +10,8 @@ export interface BoardItem {
   assigneeName?: string;
   assigneeInitials?: string;
   sourceRequestId?: string;
+  riceScore?: number;
+  planBucket?: string; // backlog | planned | in_cycle
 }
 
 export interface TriageRequest {

@@ -9,14 +9,16 @@ interface KPITileProps {
   delta?: number;
   deltaLabel?: string;
   invertDelta?: boolean; // e.g. fewer rage-clicks is good
+  sub?: string; // plain descriptive sub-line under the value
 }
 
-export function KPITile({ label, value, delta, deltaLabel, invertDelta }: KPITileProps) {
+export function KPITile({ label, value, delta, deltaLabel, invertDelta, sub }: KPITileProps) {
   const positive = delta === undefined ? undefined : invertDelta ? delta < 0 : delta > 0;
   return (
     <Card className="p-4 flex flex-col gap-1">
       <Eyebrow>{label}</Eyebrow>
       <div className="text-[26px] font-semibold leading-tight tracking-tight">{value}</div>
+      {sub && <div className="text-[12px] text-label">{sub}</div>}
       {delta !== undefined && (
         <div
           className={clsx(

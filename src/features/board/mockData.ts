@@ -1,12 +1,12 @@
 import type { BoardItem, TriageRequest } from './types';
 
 export const MOCK_BOARD_ITEMS: BoardItem[] = [
-  { id: 'b1', ref: 'QRY-0017', title: 'Can we get a dedicated instance in EU region?', type: 'query', boardStatus: 'triaged', priority: 'low', assigneeInitials: 'AR', assigneeName: 'Amir R.' },
-  { id: 'b2', ref: 'BUG-0038', title: 'Export to CSV missing timezone column', type: 'bug', boardStatus: 'triaged', priority: 'medium', assigneeInitials: 'AR', assigneeName: 'Amir R.' },
-  { id: 'b3', ref: 'BUG-0042', title: 'API rate limit not applying to enterprise tier', type: 'bug', boardStatus: 'in_development', priority: 'critical', assigneeInitials: 'SK', assigneeName: 'Sara K.' },
-  { id: 'b4', ref: 'FEAT-0024', title: 'SSO integration with Azure AD', type: 'feature', boardStatus: 'in_development', priority: 'high', assigneeInitials: 'SK', assigneeName: 'Sara K.' },
-  { id: 'b5', ref: 'BUG-0051', title: 'Webhook retries not respecting exponential backoff', type: 'bug', boardStatus: 'in_qa', priority: 'high', assigneeInitials: 'DR', assigneeName: 'Devon R.' },
-  { id: 'b6', ref: 'FEAT-0031', title: 'Custom SLA tiers per environment', type: 'feature', boardStatus: 'released', priority: 'medium', assigneeInitials: 'SK', assigneeName: 'Sara K.' },
+  { id: 'b1', ref: 'QRY-0017', title: 'Can we get a dedicated instance in EU region?', type: 'query', boardStatus: 'triaged', priority: 'low', assigneeInitials: 'AR', assigneeName: 'Amir R.', riceScore: 6.4, planBucket: 'backlog' },
+  { id: 'b2', ref: 'BUG-0038', title: 'Export to CSV missing timezone column', type: 'bug', boardStatus: 'triaged', priority: 'medium', assigneeInitials: 'AR', assigneeName: 'Amir R.', riceScore: 12.1, planBucket: 'planned' },
+  { id: 'b3', ref: 'BUG-0042', title: 'API rate limit not applying to enterprise tier', type: 'bug', boardStatus: 'in_development', priority: 'critical', assigneeInitials: 'SK', assigneeName: 'Sara K.', riceScore: 18.4, planBucket: 'in_cycle' },
+  { id: 'b4', ref: 'FEAT-0024', title: 'SSO integration with Azure AD', type: 'feature', boardStatus: 'in_development', priority: 'high', assigneeInitials: 'SK', assigneeName: 'Sara K.', riceScore: 14.2, planBucket: 'in_cycle' },
+  { id: 'b5', ref: 'BUG-0051', title: 'Webhook retries not respecting exponential backoff', type: 'bug', boardStatus: 'in_qa', priority: 'high', assigneeInitials: 'DR', assigneeName: 'Devon R.', riceScore: 9.7, planBucket: 'planned' },
+  { id: 'b6', ref: 'FEAT-0031', title: 'Custom SLA tiers per environment', type: 'feature', boardStatus: 'released', priority: 'medium', assigneeInitials: 'SK', assigneeName: 'Sara K.', riceScore: 8.3, planBucket: 'backlog' },
 ];
 
 export const MOCK_TRIAGE_REQUESTS: TriageRequest[] = [

@@ -16,6 +16,8 @@ import { TriageInboxScreen } from '@/screens/developer/TriageInboxScreen';
 import { ItemDetailScreen } from '@/screens/developer/ItemDetailScreen';
 import { QAReleaseScreen } from '@/screens/developer/QAReleaseScreen';
 import { MySLAScreen } from '@/screens/developer/MySLAScreen';
+import { DashboardScreen } from '@/screens/pm/DashboardScreen';
+import { BacklogScreen } from '@/screens/pm/BacklogScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -73,9 +75,9 @@ export const router = createHashRouter([
           {
             element: <RequireRole roles={['pm', 'manager']} />,
             children: [
-              { path: '/dashboard', element: <Placeholder title="Dashboard" milestone="M3" /> },
-              { path: '/intake', element: <Placeholder title="Intake" milestone="M3" /> },
-              { path: '/backlog', element: <Placeholder title="Backlog" milestone="M3" /> },
+              { path: '/dashboard', element: <DashboardScreen /> },
+              { path: '/intake', element: <TriageInboxScreen /> },
+              { path: '/backlog', element: <BacklogScreen /> },
               { path: '/pm/roadmap', element: <Placeholder title="Roadmap" milestone="M3" /> },
               { path: '/pm/releases', element: <Placeholder title="Release tree" milestone="M3" /> },
               { path: '/sprints', element: <Placeholder title="Sprints" milestone="M3" /> },

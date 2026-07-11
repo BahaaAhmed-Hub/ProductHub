@@ -9,6 +9,7 @@ interface BoardState {
   triage: TriageRequest[];
   moveItem: (id: string, status: BoardStatus) => void;
   addToBoard: (t: TriageRequest) => void;
+  setRice: (id: string, score: number) => void;
 }
 
 export const useBoardStore = create<BoardState>((set) => ({
@@ -20,8 +21,10 @@ export const useBoardStore = create<BoardState>((set) => ({
     set((s) => ({
       triage: s.triage.filter((r) => r.id !== t.id),
       items: [
-        { id: `b-${t.id}`, ref: t.ref, title: t.subject, type: t.type, boardStatus: 'triaged', priority: t.priority },
+        { id: `b-${t.id}`, ref: t.ref, title: t.subject, type: t.type, boardStatus: 'triaged', priority: t.priority, planBucket: 'backlog' },
         ...s.items,
       ],
     })),
+  setRice: (id, score) =>
+    set((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, riceScore: score } : i)) })),
 }));

@@ -15,13 +15,15 @@ interface ItemRow {
   board_status: BoardStatus;
   priority: Priority;
   source_request_id: string | null;
+  rice_score: number | null;
+  plan_bucket: string | null;
   assignee: { name: string } | null;
 }
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const { data, error } = await supabase
     .from('backlog_items')
-    .select('id, ref, title, type, board_status, priority, source_request_id, assignee:profiles!backlog_items_assignee_id_fkey(name)')
+    .select('id, ref, title, type, board_status, priority, source_request_id, rice_score, plan_bucket, assignee:profiles!backlog_items_assignee_id_fkey(name)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data as unknown as ItemRow[]).map((r) => ({
@@ -34,11 +36,18 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     assigneeName: r.assignee?.name,
     assigneeInitials: initials(r.assignee?.name),
     ...(r.source_request_id ? { sourceRequestId: r.source_request_id } : {}),
+    ...(r.rice_score != null ? { riceScore: Number(r.rice_score) } : {}),
+    ...(r.plan_bucket ? { planBucket: r.plan_bucket } : {}),
   }));
 }
 
 export async function updateBoardStatus(id: string, status: BoardStatus): Promise<void> {
   const { error } = await supabase.from('backlog_items').update({ board_status: status }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function updateRiceScore(id: string, score: number): Promise<void> {
+  const { error } = await supabase.from('backlog_items').update({ rice_score: score }).eq('id', id);
   if (error) throw error;
 }
 
