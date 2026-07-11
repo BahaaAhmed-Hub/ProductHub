@@ -18,6 +18,8 @@ import { QAReleaseScreen } from '@/screens/developer/QAReleaseScreen';
 import { MySLAScreen } from '@/screens/developer/MySLAScreen';
 import { DashboardScreen } from '@/screens/pm/DashboardScreen';
 import { BacklogScreen } from '@/screens/pm/BacklogScreen';
+import { RoadmapScreen } from '@/screens/pm/RoadmapScreen';
+import { AutomationsScreen } from '@/screens/pm/AutomationsScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -78,11 +80,11 @@ export const router = createHashRouter([
               { path: '/dashboard', element: <DashboardScreen /> },
               { path: '/intake', element: <TriageInboxScreen /> },
               { path: '/backlog', element: <BacklogScreen /> },
-              { path: '/pm/roadmap', element: <Placeholder title="Roadmap" milestone="M3" /> },
+              { path: '/pm/roadmap', element: <RoadmapScreen /> },
               { path: '/pm/releases', element: <Placeholder title="Release tree" milestone="M3" /> },
-              { path: '/sprints', element: <Placeholder title="Sprints" milestone="M3" /> },
+              { path: '/sprints', element: <BoardScreen /> },
               { path: '/swimlanes', element: <Placeholder title="Swimlanes" milestone="M3" /> },
-              { path: '/automations', element: <Placeholder title="Automations" milestone="M3" /> },
+              { path: '/automations', element: <AutomationsScreen /> },
               { path: '/analytics', element: <Placeholder title="Analytics (Lens)" milestone="M6" /> },
               { path: '/research', element: <Placeholder title="Research hub" milestone="M7" /> },
               { path: '/prioritize', element: <Placeholder title="Prioritization" milestone="M4" /> },
