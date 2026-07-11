@@ -1,0 +1,58 @@
+name: Apply DB migrations
+
+# Applies supabase/migrations/*.sql to the Supabase Postgres database from a
+# GitHub runner (which has open internet — unlike the build sandbox). The DB
+# connection string is read from the SUPABASE_DB_URL repo secret and never
+# printed. Runs on manual dispatch or when a migration file changes.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - '.github/workflows/db-migrate.yml'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secret is present
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - name: Ensure psql is available
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          fi
+          psql --version
+
+      - name: Apply schema (0001) — tolerant of re-runs
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "== 0001_init.sql (schema) =="
+          # No ON_ERROR_STOP: on a re-run, "type/table already exists" is harmless.
+          psql "$DB_URL" -f supabase/migrations/0001_init.sql || true
+
+      - name: Apply seed (0002) — must succeed
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "== 0002_seed.sql (seed + demo users) =="
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0002_seed.sql
+
+      - name: Verify
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          echo "profiles:"; psql "$DB_URL" -Atc "select role, email from profiles order by role;"
+          echo "requests:"; psql "$DB_URL" -Atc "select count(*) from requests;"
