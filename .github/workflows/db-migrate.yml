@@ -56,3 +56,5 @@ jobs:
         run: |
           echo "profiles:"; psql "$DB_URL" -Atc "select role, email from profiles order by role;"
           echo "requests:"; psql "$DB_URL" -Atc "select count(*) from requests;"
+
+# trigger: apply migrations (secret now set)
