@@ -9,6 +9,7 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import type { Role, User } from '@/types/domain';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { queryClient } from '@/lib/queryClient';
 import { MOCK_USERS } from './mockUsers';
 
 function initialsOf(name: string): string {
@@ -55,8 +56,9 @@ interface AuthState {
   signInWithPassword: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  /** Dev-only: switch the active role while running against mock data. */
-  setMockRole: (role: Role) => void;
+  /** Owner/preview control: change the active role. Persists to the profile in
+   * real mode; swaps the mock user in mock mode. */
+  switchRole: (role: Role) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -118,9 +120,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isSupabaseConfigured) await supabase.auth.signOut();
         setUser(null);
       },
-      setMockRole(role) {
-        localStorage.setItem(MOCK_ROLE_KEY, role);
-        setUser(MOCK_USERS[role]);
+      async switchRole(role) {
+        if (!isSupabaseConfigured) {
+          localStorage.setItem(MOCK_ROLE_KEY, role);
+          setUser(MOCK_USERS[role]);
+          return;
+        }
+        if (!user) return;
+        const { error } = await supabase.from('profiles').update({ role }).eq('id', user.id);
+        if (error) throw error;
+        queryClient.clear(); // role changes what RLS returns — drop cached data
+        setUser({ ...user, role });
       },
     }),
     [user, loading],

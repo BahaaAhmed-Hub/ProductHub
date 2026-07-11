@@ -11,6 +11,8 @@ import { MyRequestsScreen } from '@/screens/customer/MyRequestsScreen';
 import { RequestDetailScreen } from '@/screens/customer/RequestDetailScreen';
 import { PublicRoadmapScreen } from '@/screens/customer/PublicRoadmapScreen';
 import { ReleaseNotesScreen } from '@/screens/customer/ReleaseNotesScreen';
+import { BoardScreen } from '@/screens/developer/BoardScreen';
+import { TriageInboxScreen } from '@/screens/developer/TriageInboxScreen';
 import { Placeholder } from '@/screens/Placeholder';
 
 /**
@@ -56,9 +58,9 @@ export const router = createHashRouter([
           {
             element: <RequireRole roles={['developer']} />,
             children: [
-              { path: '/board', element: <Placeholder title="Developer board" milestone="M2" /> },
+              { path: '/board', element: <BoardScreen /> },
+              { path: '/triage', element: <TriageInboxScreen /> },
               { path: '/my-items', element: <Placeholder title="My items" milestone="M2" /> },
-              { path: '/triage', element: <Placeholder title="Triage inbox" milestone="M2" /> },
               { path: '/qa', element: <Placeholder title="QA & release" milestone="M2" /> },
               { path: '/sla', element: <Placeholder title="My SLA" milestone="M2" /> },
             ],
