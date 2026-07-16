@@ -52,3 +52,5 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy --project-ref "$PROJECT_REF"
+
+# trigger: deploy functions (secrets now set)
