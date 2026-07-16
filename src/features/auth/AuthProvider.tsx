@@ -65,7 +65,7 @@ interface AuthState {
   signUp: (
     email: string,
     password: string,
-    opts: { name: string; role: Role },
+    opts: { name: string; role: Role; inviteCode?: string },
   ) => Promise<SignUpResult>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -121,9 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          // The handle_new_user trigger reads name/role from user metadata to
-          // provision the profile + workspace.
-          options: { data: { name: opts.name, role: opts.role } },
+          // The handle_new_user trigger reads name/role/invite_code from user
+          // metadata to provision the profile + workspace. An invite_code, if
+          // valid, takes priority over the role/domain logic.
+          options: { data: { name: opts.name, role: opts.role, invite_code: opts.inviteCode } },
         });
         if (error) throw error;
         if (data.session) {

@@ -67,15 +67,37 @@ export const NAV: Record<Role, NavSection[]> = {
       ],
     },
   ],
+  // Manager has full PM capability plus oversight — a Manager can do
+  // everything a PM can, so this section mirrors `pm` and adds oversight.
   manager: [
     {
       title: 'Oversight',
       items: [
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
         { label: 'SLA Breaches', icon: 'error', path: '/sla-breaches' },
-        { label: 'Team Performance', icon: 'groups', path: '/team' },
+        { label: 'Team & Members', icon: 'groups', path: '/team' },
         { label: 'Reports', icon: 'summarize', path: '/reports' },
+      ],
+    },
+    {
+      title: 'Planning',
+      items: [
+        { label: 'Triage Inbox', icon: 'move_to_inbox', path: '/intake', badge: 'triage' },
+        { label: 'Backlog', icon: 'format_list_bulleted', path: '/backlog' },
+        { label: 'Roadmap', icon: 'map', path: '/pm/roadmap' },
+        { label: 'Release Tree', icon: 'account_tree', path: '/pm/releases' },
+        { label: 'Sprint / Cycles', icon: 'sprint', path: '/sprints' },
+        { label: 'Swimlanes', icon: 'view_week', path: '/swimlanes' },
+        { label: 'Automations', icon: 'bolt', path: '/automations' },
+      ],
+    },
+    {
+      title: 'Insights',
+      items: [
         { label: 'Analytics', icon: 'insights', path: '/analytics' },
+        { label: 'Research', icon: 'science', path: '/research' },
+        { label: 'Prioritization', icon: 'tune', path: '/prioritize' },
+        { label: 'Integrations', icon: 'extension', path: '/integrations' },
       ],
     },
   ],

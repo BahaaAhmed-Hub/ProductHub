@@ -4,7 +4,7 @@ import {
   LayoutDashboard, FileText, AlertCircle, ChevronDown, Puzzle, List, Users,
   CircleHelp, Inbox, LineChart, Flame, LogOut, Map, Mic, Bell, Clock,
   FlaskConical, Search, Repeat, ScrollText, SlidersHorizontal, TrendingUp,
-  TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight,
+  TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight, Copy,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -59,6 +59,7 @@ const MAP: Record<string, LucideIcon> = {
   trending_down: TrendingDown,
   view_kanban: SquareKanban,
   view_week: Columns3,
+  content_copy: Copy,
 };
 
 interface IconProps {

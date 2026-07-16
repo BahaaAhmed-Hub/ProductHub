@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import type { Role } from '@/types/domain';
 
 const ROLES: { value: Role; label: string; hint: string }[] = [
@@ -13,11 +14,20 @@ const ROLES: { value: Role; label: string; hint: string }[] = [
   { value: 'stakeholder', label: 'Stakeholder', hint: 'Read-only roadmap' },
 ];
 
+interface InviteInfo {
+  role: Role;
+  workspaceName: string;
+}
+
 /** Screen 01 — Sign in / open sign up. Dark navy hero + centered card. */
 export function SignInScreen() {
   const { signInWithPassword, signUp, signInWithGoogle, mockMode } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [params] = useSearchParams();
+  const inviteCode = params.get('invite') ?? undefined;
+  const [invite, setInvite] = useState<InviteInfo | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'signin' | 'signup'>(inviteCode ? 'signup' : 'signin');
   const [name, setName] = useState('');
   const [role, setRole] = useState<Role>('customer');
   const [email, setEmail] = useState('');
@@ -27,6 +37,24 @@ export function SignInScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    if (!inviteCode || !isSupabaseConfigured) return;
+    supabase
+      .from('workspace_invites')
+      .select('role, revoked, expires_at, workspaces(name)')
+      .eq('code', inviteCode)
+      .maybeSingle()
+      .then(({ data }) => {
+        const row = data as { role: Role; revoked: boolean; expires_at: string | null; workspaces: { name: string } | null } | null;
+        if (!row || row.revoked || (row.expires_at && new Date(row.expires_at) < new Date())) {
+          setInviteError('This invite link is invalid or has expired.');
+          return;
+        }
+        setInvite({ role: row.role, workspaceName: row.workspaces?.name ?? 'the workspace' });
+        setRole(row.role);
+      });
+  }, [inviteCode]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -34,7 +62,11 @@ export function SignInScreen() {
     setNotice(null);
     try {
       if (mode === 'signup') {
-        const { needsConfirmation } = await signUp(email, password, { name: name || email.split('@')[0]!, role });
+        const { needsConfirmation } = await signUp(email, password, {
+          name: name || email.split('@')[0]!,
+          role: invite ? invite.role : role,
+          ...(inviteCode ? { inviteCode } : {}),
+        });
         if (needsConfirmation) {
           setNotice('Check your email to confirm your account, then sign in.');
           setMode('signin');
@@ -71,8 +103,11 @@ export function SignInScreen() {
       <div className="w-[400px] bg-surface rounded-frame shadow-pop p-8 my-8">
         <h1 className="text-xl font-semibold tracking-tight">{isSignup ? 'Create your account' : 'Sign in'}</h1>
         <p className="text-sm text-body mt-1">
-          {isSignup ? 'Pick a role — you get your own workspace.' : 'Access your ProductHub workspace'}
+          {invite
+            ? `You're invited to ${invite.workspaceName}, as ${ROLES.find((r) => r.value === invite.role)?.label}.`
+            : isSignup ? 'Pick a role — you get your own workspace.' : 'Access your ProductHub workspace'}
         </p>
+        {inviteError && <p className="text-xs text-danger mt-1">{inviteError}</p>}
 
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-4">
           {isSignup && (
@@ -87,24 +122,26 @@ export function SignInScreen() {
                 />
               </label>
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-eyebrow font-medium uppercase text-label">I am a…</span>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {ROLES.map((r) => (
-                    <button
-                      key={r.value}
-                      type="button"
-                      onClick={() => setRole(r.value)}
-                      className={`flex items-center justify-between px-3 h-11 rounded-control border-[0.5px] text-left ${
-                        role === r.value ? 'border-accent bg-accent-bg' : 'border-hairline hover:bg-[#F4F3F0]'
-                      }`}
-                    >
-                      <span className="text-[13px] font-medium">{r.label}</span>
-                      <span className="text-[11px] text-label">{r.hint}</span>
-                    </button>
-                  ))}
-                </div>
-              </label>
+              {!invite && (
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-eyebrow font-medium uppercase text-label">I am a…</span>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {ROLES.map((r) => (
+                      <button
+                        key={r.value}
+                        type="button"
+                        onClick={() => setRole(r.value)}
+                        className={`flex items-center justify-between px-3 h-11 rounded-control border-[0.5px] text-left ${
+                          role === r.value ? 'border-accent bg-accent-bg' : 'border-hairline hover:bg-[#F4F3F0]'
+                        }`}
+                      >
+                        <span className="text-[13px] font-medium">{r.label}</span>
+                        <span className="text-[11px] text-label">{r.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </label>
+              )}
             </>
           )}
 

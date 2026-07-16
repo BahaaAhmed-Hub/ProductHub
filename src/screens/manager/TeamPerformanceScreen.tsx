@@ -4,19 +4,30 @@ import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Tag';
-import { useBoardItems } from '@/features/board/hooks';
-import { usePendingMembers, useMemberReview, type PendingMember } from '@/features/team';
+import { Icon } from '@/components/ui/Icon';
+import {
+  usePendingMembers, useMemberReview, useTeamMembers, useChangeMemberRole,
+  useInvites, useInviteActions,
+  type PendingMember, type Member, type Invite,
+} from '@/features/team';
+import type { Role } from '@/types/domain';
 
 const ROLE_LABEL: Record<string, string> = {
   customer: 'Customer', developer: 'Developer', pm: 'Product Manager', manager: 'Manager', stakeholder: 'Stakeholder',
 };
+const ROLES: Role[] = ['customer', 'developer', 'pm', 'manager', 'stakeholder'];
 
-/** Screen 31 — Manager team: pending approvals + performance. */
+/** Screen 31 — Team & Members: pending approvals, invite links, member roster. */
 export function TeamPerformanceScreen() {
-  const { items } = useBoardItems();
   const { pending } = usePendingMembers();
   const review = useMemberReview();
+  const { members, isLoading } = useTeamMembers();
+  const changeRole = useChangeMemberRole();
+  const { invites } = useInvites();
+  const inviteActions = useInviteActions();
   const [busy, setBusy] = useState<string | null>(null);
+  const [inviteRole, setInviteRole] = useState<Role>('developer');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function act(m: PendingMember, kind: 'approve' | 'decline') {
     setBusy(m.id);
@@ -28,22 +39,40 @@ export function TeamPerformanceScreen() {
     }
   }
 
-  const byPerson = new Map<string, { name: string; initials: string; assigned: number; released: number; active: number }>();
-  for (const it of items) {
-    const name = it.assigneeName ?? 'Unassigned';
-    const initials = it.assigneeInitials ?? '—';
-    const cur = byPerson.get(name) ?? { name, initials, assigned: 0, released: 0, active: 0 };
-    cur.assigned += 1;
-    if (it.boardStatus === 'released') cur.released += 1;
-    else cur.active += 1;
-    byPerson.set(name, cur);
+  async function onCreateInvite() {
+    setBusy('new-invite');
+    try {
+      await inviteActions.create(inviteRole);
+    } finally {
+      setBusy(null);
+    }
   }
-  const team = [...byPerson.values()].sort((a, b) => b.assigned - a.assigned);
+
+  function inviteUrl(inv: Invite): string {
+    return `${window.location.origin}${window.location.pathname}#/signin?invite=${inv.code}`;
+  }
+
+  async function copyInvite(inv: Invite) {
+    await navigator.clipboard.writeText(inviteUrl(inv));
+    setCopiedId(inv.id);
+    setTimeout(() => setCopiedId(null), 1500);
+  }
+
+  async function onRoleChange(m: Member, role: Role) {
+    setBusy(m.id);
+    try {
+      await changeRole(m.id, role);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <>
-      <TopNav center={<span className="text-[13px] text-body">Team performance</span>} notificationCount={4} />
+      <TopNav center={<span className="text-[13px] text-body">Team</span>} notificationCount={4} />
       <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
+        <h1 className="text-lg font-semibold tracking-tight mb-4">Team & members</h1>
+
         {pending.length > 0 && (
           <Card className="p-5 max-w-3xl mb-4 border-[#E7CE9B]">
             <div className="flex items-center gap-2 mb-3">
@@ -65,27 +94,63 @@ export function TeamPerformanceScreen() {
           </Card>
         )}
 
-        <h1 className="text-lg font-semibold tracking-tight mb-4">Team performance</h1>
-        <Card className="p-5 max-w-3xl">
-          <div className="grid grid-cols-[1fr_110px_110px_90px] gap-3 px-1 pb-2 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
-            <span>Member</span><span className="text-right">Assigned</span>
-            <span className="text-right">Released</span><span className="text-right">Active</span>
+        {/* Invite links */}
+        <Card className="p-5 max-w-3xl mb-4">
+          <div className="text-sm font-semibold mb-3">Invite by link</div>
+          <div className="flex items-center gap-2 mb-4">
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value as Role)}
+              className="h-9 px-3 rounded-control border-[0.5px] border-hairline bg-surface text-[13px] outline-none"
+            >
+              {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            </select>
+            <Button icon="add" disabled={busy === 'new-invite'} onClick={onCreateInvite}>
+              {busy === 'new-invite' ? 'Creating…' : 'Create invite link'}
+            </Button>
           </div>
-          {team.length === 0 ? (
-            <div className="py-6 text-[13px] text-body">No assigned work yet.</div>
+          {invites.length === 0 ? (
+            <p className="text-[13px] text-body">No active invite links. Create one above — anyone with the link joins your workspace with the chosen role.</p>
           ) : (
-            team.map((t) => (
-              <div key={t.name} className="grid grid-cols-[1fr_110px_110px_90px] gap-3 items-center px-1 h-12 border-b-[0.5px] border-hairline last:border-0">
-                <div className="flex items-center gap-2.5">
-                  <Avatar initials={t.initials} size={26} />
-                  <span className="text-[13px] font-medium">{t.name}</span>
-                </div>
-                <span className="text-[13px] text-right font-mono">{t.assigned}</span>
-                <span className="text-[13px] text-right font-mono text-success">{t.released}</span>
-                <span className="text-[13px] text-right font-mono text-body">{t.active}</span>
+            invites.map((inv) => (
+              <div key={inv.id} className="flex items-center gap-3 py-2 border-b-[0.5px] border-hairline last:border-0">
+                <Tag tone="pm">{ROLE_LABEL[inv.role]}</Tag>
+                <span className="text-[12px] font-mono text-body truncate flex-1">{inviteUrl(inv)}</span>
+                <button className="text-[12px] text-accent inline-flex items-center gap-1" onClick={() => copyInvite(inv)}>
+                  <Icon name={copiedId === inv.id ? 'check' : 'content_copy'} size={14} />
+                  {copiedId === inv.id ? 'Copied' : 'Copy'}
+                </button>
+                <button className="text-[12px] text-danger" onClick={() => inviteActions.revoke(inv.id)}>Revoke</button>
               </div>
             ))
           )}
+        </Card>
+
+        {/* Roster */}
+        <Card className="p-5 max-w-3xl">
+          <div className="text-sm font-semibold mb-3">Members</div>
+          {isLoading && <div className="text-[13px] text-body">Loading…</div>}
+          {!isLoading && members.length === 0 && <p className="text-[13px] text-body">No members yet.</p>}
+          {members.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 py-2.5 border-b-[0.5px] border-hairline last:border-0">
+              <Avatar initials={m.name.slice(0, 2).toUpperCase()} size={28} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium truncate">
+                  {m.name} {m.isSelf && <span className="text-label font-normal">(you)</span>}
+                </div>
+                <div className="text-[11px] text-label truncate">{m.email}</div>
+              </div>
+              {m.status === 'pending' && <Tag tone="accent">Pending</Tag>}
+              <select
+                value={m.role}
+                disabled={m.isSelf || busy === m.id}
+                onChange={(e) => onRoleChange(m, e.target.value as Role)}
+                className="h-8 px-2.5 rounded-control border-[0.5px] border-hairline bg-surface text-[12px] outline-none disabled:opacity-50"
+              >
+                {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              </select>
+            </div>
+          ))}
         </Card>
       </div>
     </>

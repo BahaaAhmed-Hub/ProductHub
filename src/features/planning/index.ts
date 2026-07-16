@@ -133,7 +133,6 @@ export function useModels(): { models: PriModel[]; isLoading: boolean } {
 
 export function useAutomations(): { automations: Automation[]; isLoading: boolean } {
   const mock = useMock((s) => s.automations);
-  const { user } = useAuth();
   const q = useQuery({
     queryKey: ['automations'],
     enabled: isSupabaseConfigured,
@@ -143,16 +142,7 @@ export function useAutomations(): { automations: Automation[]; isLoading: boolea
         .select('id, name, trigger, action, active, runs')
         .order('created_at', { ascending: true });
       if (error) throw error;
-      let rows = data as Automation[];
-      // First visit: provision the default rule set for this workspace.
-      if (rows.length === 0 && user?.workspaceId) {
-        await supabase.from('automations').insert(
-          DEFAULT_AUTOMATIONS.map((a) => ({ ...a, workspace_id: user.workspaceId })),
-        );
-        const re = await supabase.from('automations').select('id, name, trigger, action, active, runs').order('created_at', { ascending: true });
-        rows = (re.data as Automation[]) ?? [];
-      }
-      return rows;
+      return data as Automation[];
     },
   });
   if (isSupabaseConfigured) return { automations: q.data ?? [], isLoading: q.isLoading };
@@ -195,43 +185,6 @@ export function usePlanningActions() {
       const { error } = await supabase.from('prioritization_models').delete().eq('id', id);
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ['models'] });
-    },
-    /** Insert real sample records (releases, sprint, scored backlog) into the workspace. */
-    async seedWorkspace() {
-      if (!isSupabaseConfigured || !ws) return;
-      const { count } = await supabase
-        .from('backlog_items')
-        .select('id', { count: 'exact', head: true });
-      if ((count ?? 0) > 0) return; // already has data
-      await supabase.from('sprints').insert({ workspace_id: ws, name: 'Sprint 24' });
-      await supabase.from('releases').insert([
-        { workspace_id: ws, name: 'Release 4.3', status: 'on_track' },
-        { workspace_id: ws, name: 'Release 4.4', status: 'planned' },
-      ]);
-      await supabase.from('backlog_items').insert([
-        { workspace_id: ws, ref: 'BUG-0042', title: 'API rate limit not applying to enterprise tier', type: 'bug', board_status: 'in_development', priority: 'critical', rice_score: 18.4, wsjf_score: 8.0, effort: 3, swimlane: 'Platform', plan_bucket: 'in_cycle' },
-        { workspace_id: ws, ref: 'FEAT-0024', title: 'SSO integration with Azure AD', type: 'feature', board_status: 'in_development', priority: 'high', rice_score: 14.2, wsjf_score: 3.8, effort: 5, swimlane: 'Platform', plan_bucket: 'in_cycle' },
-        { workspace_id: ws, ref: 'BUG-0038', title: 'Export to CSV missing timezone column', type: 'bug', board_status: 'triaged', priority: 'medium', rice_score: 12.1, wsjf_score: 6.0, effort: 2, swimlane: 'Reports', plan_bucket: 'planned' },
-        { workspace_id: ws, ref: 'BUG-0051', title: 'Webhook retries not respecting exponential backoff', type: 'bug', board_status: 'in_qa', priority: 'high', rice_score: 9.7, wsjf_score: 4.8, effort: 4, swimlane: 'Integrations', plan_bucket: 'planned' },
-        { workspace_id: ws, ref: 'QRY-0017', title: 'Can we get a dedicated instance in EU region?', type: 'query', board_status: 'triaged', priority: 'low', rice_score: 6.4, wsjf_score: 2.3, effort: 3, swimlane: 'Platform', plan_bucket: 'backlog' },
-        { workspace_id: ws, ref: 'FEAT-0031', title: 'Custom SLA tiers per environment', type: 'feature', board_status: 'released', priority: 'medium', rice_score: 8.3, wsjf_score: 2.6, effort: 5, swimlane: 'Reports', plan_bucket: 'backlog' },
-      ]);
-      // A few notifications so the bell has real content.
-      const prof = await supabase.from('profiles').select('id').eq('auth_uid', (await supabase.auth.getUser()).data.user?.id ?? '').maybeSingle();
-      const pid = (prof.data as { id: string } | null)?.id;
-      if (pid) {
-        await supabase.from('notifications').insert([
-          { user_id: pid, kind: 'welcome', title: 'Welcome to ProductHub', body: 'Your workspace is ready — start with the backlog.' },
-          { user_id: pid, kind: 'triage', title: '2 requests awaiting triage', body: 'From the sample data' },
-          { user_id: pid, kind: 'sla', title: 'BUG-0042 nearing SLA', body: 'Critical · under 8h to resolution' },
-        ]);
-      }
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['board'] }),
-        qc.invalidateQueries({ queryKey: ['releases'] }),
-        qc.invalidateQueries({ queryKey: ['sprints'] }),
-        qc.invalidateQueries({ queryKey: ['notifications'] }),
-      ]);
     },
   };
 }
