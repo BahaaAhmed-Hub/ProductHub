@@ -216,10 +216,21 @@ export function usePlanningActions() {
         { workspace_id: ws, ref: 'QRY-0017', title: 'Can we get a dedicated instance in EU region?', type: 'query', board_status: 'triaged', priority: 'low', rice_score: 6.4, wsjf_score: 2.3, effort: 3, swimlane: 'Platform', plan_bucket: 'backlog' },
         { workspace_id: ws, ref: 'FEAT-0031', title: 'Custom SLA tiers per environment', type: 'feature', board_status: 'released', priority: 'medium', rice_score: 8.3, wsjf_score: 2.6, effort: 5, swimlane: 'Reports', plan_bucket: 'backlog' },
       ]);
+      // A few notifications so the bell has real content.
+      const prof = await supabase.from('profiles').select('id').eq('auth_uid', (await supabase.auth.getUser()).data.user?.id ?? '').maybeSingle();
+      const pid = (prof.data as { id: string } | null)?.id;
+      if (pid) {
+        await supabase.from('notifications').insert([
+          { user_id: pid, kind: 'welcome', title: 'Welcome to ProductHub', body: 'Your workspace is ready — start with the backlog.' },
+          { user_id: pid, kind: 'triage', title: '2 requests awaiting triage', body: 'From the sample data' },
+          { user_id: pid, kind: 'sla', title: 'BUG-0042 nearing SLA', body: 'Critical · under 8h to resolution' },
+        ]);
+      }
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['board'] }),
         qc.invalidateQueries({ queryKey: ['releases'] }),
         qc.invalidateQueries({ queryKey: ['sprints'] }),
+        qc.invalidateQueries({ queryKey: ['notifications'] }),
       ]);
     },
   };
