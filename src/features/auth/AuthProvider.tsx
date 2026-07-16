@@ -26,7 +26,7 @@ async function resolveProfile(session: Session | null): Promise<User | null> {
   if (!session) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, workspace_id, name, email, role, avatar_url')
+    .select('id, workspace_id, name, email, role, status, requested_role, avatar_url')
     .eq('auth_uid', session.user.id)
     .maybeSingle();
   if (error || !data) return null;
@@ -36,6 +36,8 @@ async function resolveProfile(session: Session | null): Promise<User | null> {
     name: string;
     email: string;
     role: Role;
+    status: 'active' | 'pending' | null;
+    requested_role: Role | null;
     avatar_url: string | null;
   };
   return {
@@ -45,6 +47,8 @@ async function resolveProfile(session: Session | null): Promise<User | null> {
     email: row.email,
     role: row.role,
     initials: initialsOf(row.name),
+    ...(row.status ? { status: row.status } : {}),
+    ...(row.requested_role ? { requestedRole: row.requested_role } : {}),
     ...(row.avatar_url ? { avatarUrl: row.avatar_url } : {}),
   };
 }

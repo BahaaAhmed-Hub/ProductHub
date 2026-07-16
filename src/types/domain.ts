@@ -38,6 +38,8 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  status?: 'active' | 'pending';
+  requestedRole?: Role;
   avatarUrl?: string;
   initials: string;
 }
