@@ -16,7 +16,17 @@ export interface BoardItem {
   scoreInputs?: Record<string, unknown>;
   swimlane?: string;
   releaseId?: string;
+  createdAt?: string;
   planBucket?: string; // backlog | planned | in_cycle
+}
+
+export interface ItemNote {
+  id: string;
+  author: string;
+  initials: string;
+  ago: string;
+  body: string;
+  internal: boolean;
 }
 
 export interface TriageRequest {

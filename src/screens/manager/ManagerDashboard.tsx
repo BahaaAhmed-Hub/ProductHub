@@ -2,52 +2,83 @@ import { TopNav } from '@/components/layout/TopNav';
 import { KPITile } from '@/components/ui/KPITile';
 import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { useBoardItems } from '@/features/board/hooks';
+import { useRequests } from '@/features/requests/hooks';
+import type { Priority } from '@/types/domain';
 
-const TEAM = [
-  { name: 'Sara K.', initials: 'SK', resolved: 18, sla: 96, load: 7 },
-  { name: 'Devon R.', initials: 'DR', resolved: 14, sla: 91, load: 5 },
-  { name: 'Amir R.', initials: 'AR', resolved: 11, sla: 88, load: 6 },
-];
+const TARGET_H: Record<Priority, number> = { critical: 8, high: 24, medium: 72, low: 120 };
 
-/** Screen 29 — Manager oversight dashboard. */
+/** Screen 29 — Manager oversight dashboard (real aggregates from the workspace). */
 export function ManagerDashboard() {
+  const { items } = useBoardItems();
+  const { requests } = useRequests();
+
+  // SLA compliance from requests (met = resolved, or within target)
+  const openReqs = requests.filter((r) => r.status !== 'resolved');
+  const atRisk = openReqs.filter((r) => {
+    if (!r.createdAt) return false;
+    const left = TARGET_H[r.priority] - (Date.now() - new Date(r.createdAt).getTime()) / 3_600_000;
+    return left <= TARGET_H[r.priority] * 0.25;
+  }).length;
+  const breached = openReqs.filter((r) => {
+    if (!r.createdAt) return false;
+    return TARGET_H[r.priority] - (Date.now() - new Date(r.createdAt).getTime()) / 3_600_000 <= 0;
+  }).length;
+  const compliance = requests.length ? Math.round(((requests.length - breached) / requests.length) * 100) : 100;
+  const resolved = items.filter((i) => i.boardStatus === 'released').length;
+
+  // Team aggregation from board items
+  const byPerson = new Map<string, { name: string; initials: string; resolved: number; load: number }>();
+  for (const it of items) {
+    const name = it.assigneeName ?? 'Unassigned';
+    const cur = byPerson.get(name) ?? { name, initials: it.assigneeInitials ?? '—', resolved: 0, load: 0 };
+    if (it.boardStatus === 'released') cur.resolved += 1;
+    else cur.load += 1;
+    byPerson.set(name, cur);
+  }
+  const team = [...byPerson.values()].sort((a, b) => b.resolved - a.resolved);
+
   return (
     <>
       <TopNav center={<span className="text-[13px] text-body">Dashboard</span>} notificationCount={4} />
       <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
         <h1 className="text-lg font-semibold tracking-tight mb-4">Team overview</h1>
         <div className="grid grid-cols-4 gap-3">
-          <KPITile label="SLA compliance" value="92%" delta={2} deltaLabel="pt vs last month" />
-          <KPITile label="Open · at risk" value={2} sub="need attention today" />
-          <KPITile label="Avg first response" value="1.4h" delta={-0.3} deltaLabel="h" invertDelta />
-          <KPITile label="Resolved · 30d" value={143} delta={11} deltaLabel="%" />
+          <KPITile label="SLA compliance" value={`${compliance}%`} sub={`${requests.length} requests`} />
+          <KPITile label="Open · at risk" value={atRisk} sub="< 25% time left" />
+          <KPITile label="Open requests" value={openReqs.length} />
+          <KPITile label="Resolved (released)" value={resolved} />
         </div>
 
         <div className="grid grid-cols-[1fr_320px] gap-4 mt-4">
           <Card className="p-5">
             <div className="text-sm font-semibold mb-3">Team performance</div>
-            <div className="grid grid-cols-[1fr_100px_90px_70px] gap-3 px-1 pb-2 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
-              <span>Developer</span><span className="text-right">Resolved</span>
-              <span className="text-right">SLA %</span><span className="text-right">Load</span>
+            <div className="grid grid-cols-[1fr_100px_70px] gap-3 px-1 pb-2 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
+              <span>Developer</span><span className="text-right">Resolved</span><span className="text-right">Active</span>
             </div>
-            {TEAM.map((t) => (
-              <div key={t.name} className="grid grid-cols-[1fr_100px_90px_70px] gap-3 items-center px-1 h-12 border-b-[0.5px] border-hairline last:border-0">
-                <div className="flex items-center gap-2.5">
-                  <Avatar initials={t.initials} size={26} />
-                  <span className="text-[13px] font-medium">{t.name}</span>
+            {team.length === 0 ? (
+              <div className="py-6 text-[13px] text-body">No assigned work yet.</div>
+            ) : (
+              team.map((t) => (
+                <div key={t.name} className="grid grid-cols-[1fr_100px_70px] gap-3 items-center px-1 h-12 border-b-[0.5px] border-hairline last:border-0">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar initials={t.initials} size={26} />
+                    <span className="text-[13px] font-medium">{t.name}</span>
+                  </div>
+                  <span className="text-[13px] text-right font-mono text-success">{t.resolved}</span>
+                  <span className="text-[13px] text-right font-mono text-body">{t.load}</span>
                 </div>
-                <span className="text-[13px] text-right font-mono">{t.resolved}</span>
-                <span className={`text-[13px] text-right font-mono ${t.sla >= 90 ? 'text-success' : 'text-[#9A6410]'}`}>{t.sla}%</span>
-                <span className="text-[13px] text-right font-mono text-body">{t.load}</span>
-              </div>
-            ))}
+              ))
+            )}
           </Card>
 
           <Card className="p-5">
-            <div className="text-sm font-semibold mb-3">SLA breaches · 30d</div>
-            <div className="text-[40px] font-semibold text-danger leading-none">3</div>
+            <div className="text-sm font-semibold mb-3">SLA breaches (open)</div>
+            <div className={`text-[40px] font-semibold leading-none ${breached ? 'text-danger' : 'text-success'}`}>{breached}</div>
             <p className="text-[12px] text-body mt-2">
-              2 in Billing, 1 in Platform. All resolved within 2h of breach. Trend down 40% vs prior month.
+              {breached === 0
+                ? 'No open requests past their SLA target. 🎉'
+                : `${breached} open request${breached > 1 ? 's' : ''} past target, ${atRisk} more at risk.`}
             </p>
           </Card>
         </div>

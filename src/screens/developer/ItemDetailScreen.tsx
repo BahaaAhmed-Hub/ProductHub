@@ -7,39 +7,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Eyebrow } from '@/components/ui/Card';
 import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
 import { Segmented } from '@/components/ui/Segmented';
-import { useBoardItems } from '@/features/board/hooks';
-
-interface Note {
-  author: string;
-  initials: string;
-  ago: string;
-  body: string;
-  internal: boolean;
-}
-
-const SAMPLE_NOTES: Note[] = [
-  {
-    author: 'Maya T.',
-    initials: 'MT',
-    ago: '2d ago',
-    internal: false,
-    body: "Seeing 429s on the enterprise plan even though we're well under quota. Started after the Tuesday deploy.",
-  },
-  {
-    author: 'Sara K.',
-    initials: 'SK',
-    ago: '4h ago',
-    internal: true,
-    body: "Confirmed — the limiter isn't reading the tier override flag. Patch in progress, targeting today's QA build.",
-  },
-  {
-    author: 'Ahmed R.',
-    initials: 'AR',
-    ago: '2h ago',
-    internal: true,
-    body: 'Root cause is in the gateway config refactor — linking that PR here.',
-  },
-];
+import { useBoardItems, useItemNotes, useAddNote, useMoveItem } from '@/features/board/hooks';
+import type { ItemNote } from '@/features/board/types';
 
 /** Screens 11/12/41 — Developer item detail with internal/external activity + Slack sync. */
 export function ItemDetailScreen() {
@@ -47,8 +16,23 @@ export function ItemDetailScreen() {
   const navigate = useNavigate();
   const { items } = useBoardItems();
   const item = items.find((i) => i.id === id);
+  const { notes } = useItemNotes(id);
+  const addNote = useAddNote(id);
+  const move = useMoveItem();
   const [channel, setChannel] = useState<'internal' | 'external'>('internal');
   const [comment, setComment] = useState('');
+  const [sending, setSending] = useState(false);
+
+  async function onSend() {
+    if (!comment.trim()) return;
+    setSending(true);
+    try {
+      await addNote(comment.trim(), channel === 'internal');
+      setComment('');
+    } finally {
+      setSending(false);
+    }
+  }
 
   if (!item) {
     return (
@@ -65,8 +49,9 @@ export function ItemDetailScreen() {
     item.boardStatus === 'in_development' ? 'In Development'
     : item.boardStatus === 'in_qa' ? 'In QA'
     : item.boardStatus === 'released' ? 'Released' : 'Triaged';
-  const external = SAMPLE_NOTES.filter((n) => !n.internal);
-  const internal = SAMPLE_NOTES.filter((n) => n.internal);
+  const external = notes.filter((n) => !n.internal);
+  const internal = notes.filter((n) => n.internal);
+  const isReleased = item.boardStatus === 'released';
 
   return (
     <>
@@ -89,27 +74,30 @@ export function ItemDetailScreen() {
               <div className="flex items-center gap-2 mt-2">
                 <PriorityTag priority={item.priority} />
                 <Tag tone="pm">{statusLabel}</Tag>
-                <span className="inline-flex items-center gap-1 text-[11px] text-[#9A6410] font-mono">
-                  <Icon name="schedule" size={13} /> 0h 47m · SLA
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] text-[#3F3791]">
-                  <Icon name="bolt" size={13} /> Synced to Slack
-                </span>
+                {slaLabel(item.createdAt, item.priority, isReleased) && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-[#9A6410] font-mono">
+                    <Icon name="schedule" size={13} /> {slaLabel(item.createdAt, item.priority, isReleased)}
+                  </span>
+                )}
               </div>
             </div>
-            <button className="inline-flex items-center gap-1.5 text-[13px] text-success font-medium hover:opacity-80">
-              <Icon name="check" size={16} /> Mark complete
+            <button
+              onClick={() => !isReleased && move(item.id, 'released')}
+              disabled={isReleased}
+              className="inline-flex items-center gap-1.5 text-[13px] text-success font-medium hover:opacity-80 disabled:opacity-50"
+            >
+              <Icon name="check" size={16} /> {isReleased ? 'Completed' : 'Mark complete'}
             </button>
           </div>
 
           {/* Meta grid */}
           <div className="grid grid-cols-3 gap-x-8 gap-y-5 mt-6 bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame p-5">
-            <Meta label="Customer" value="Orion Cloud" />
-            <Meta label="Reporter" value="Maya T." />
-            <Meta label="Created" value="Jun 11, 2026" />
-            <Meta label="Assignee" value={item.assigneeName ?? 'Unassigned'} />
             <Meta label="Type" value={<TypeTag type={item.type} />} />
-            <Meta label="Branch" value={<span className="font-mono text-[12px] text-accent">fix/tier-limiter</span>} />
+            <Meta label="Priority" value={<PriorityTag priority={item.priority} />} />
+            <Meta label="Status" value={statusLabel} />
+            <Meta label="Assignee" value={item.assigneeName ?? 'Unassigned'} />
+            <Meta label="Created" value={item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'} />
+            <Meta label="RICE" value={item.riceScore != null ? item.riceScore.toFixed(1) : '—'} />
           </div>
 
           {/* Activity — two channels */}
@@ -139,10 +127,11 @@ export function ItemDetailScreen() {
                 ]}
               />
               <button
-                disabled={!comment.trim()}
+                onClick={onSend}
+                disabled={!comment.trim() || sending}
                 className="h-8 px-4 rounded-control bg-navy text-white text-[13px] font-medium disabled:opacity-40 hover:bg-[#152238]"
               >
-                Send
+                {sending ? 'Sending…' : 'Send'}
               </button>
             </div>
           </div>
@@ -161,7 +150,18 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function Channel({ title, dot, notes }: { title: string; dot: string; notes: Note[] }) {
+const SLA_TARGET_H: Record<string, number> = { critical: 8, high: 24, medium: 72, low: 120 };
+function slaLabel(createdAt: string | undefined, priority: string, resolved: boolean): string | null {
+  if (resolved || !createdAt) return null;
+  const target = SLA_TARGET_H[priority] ?? 72;
+  const left = target - (Date.now() - new Date(createdAt).getTime()) / 3_600_000;
+  if (left <= 0) return `SLA breached ${Math.abs(left).toFixed(0)}h`;
+  const h = Math.floor(left);
+  const m = Math.floor((left - h) * 60);
+  return `${h}h ${m}m · SLA`;
+}
+
+function Channel({ title, dot, notes }: { title: string; dot: string; notes: ItemNote[] }) {
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-2">
@@ -169,8 +169,8 @@ function Channel({ title, dot, notes }: { title: string; dot: string; notes: Not
         <span className="text-[11px] font-medium text-label">{title}</span>
       </div>
       <div className="flex flex-col gap-3">
-        {notes.map((n, i) => (
-          <div key={i} className="flex gap-2.5">
+        {notes.map((n) => (
+          <div key={n.id} className="flex gap-2.5">
             <Avatar initials={n.initials} size={24} tone={n.internal ? 'pm' : 'neutral'} />
             <div className="min-w-0">
               <div className="flex items-center gap-2">

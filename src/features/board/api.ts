@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase';
 import type { BoardStatus, Priority, RequestType } from '@/types/domain';
-import type { BoardItem, TriageRequest } from './types';
+import type { BoardItem, ItemNote, TriageRequest } from './types';
 
 function initials(name?: string | null): string | undefined {
   if (!name) return undefined;
+  return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+}
+function initialsReq(name: string): string {
   return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 }
 
@@ -22,11 +25,12 @@ interface ItemRow {
   swimlane: string | null;
   release_id: string | null;
   plan_bucket: string | null;
+  created_at: string | null;
   assignee: { name: string } | null;
 }
 
 const ITEM_SELECT =
-  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee:profiles!backlog_items_assignee_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const { data, error } = await supabase
@@ -50,8 +54,47 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     ...(r.score_inputs ? { scoreInputs: r.score_inputs } : {}),
     ...(r.swimlane ? { swimlane: r.swimlane } : {}),
     ...(r.release_id ? { releaseId: r.release_id } : {}),
+    ...(r.created_at ? { createdAt: r.created_at } : {}),
     ...(r.plan_bucket ? { planBucket: r.plan_bucket } : {}),
   }));
+}
+
+// ---------- item notes (activity) ----------
+interface NoteRow {
+  id: string;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+  author: { name: string } | null;
+}
+
+export async function listItemNotes(itemId: string): Promise<ItemNote[]> {
+  const { data, error } = await supabase
+    .from('item_notes')
+    .select('id, body, is_internal, created_at, author:profiles!item_notes_author_id_fkey(name)')
+    .eq('item_id', itemId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as unknown as NoteRow[]).map((n) => ({
+    id: n.id,
+    author: n.author?.name ?? 'Member',
+    initials: initialsReq(n.author?.name ?? 'M'),
+    ago: relAgo(n.created_at),
+    body: n.body,
+    internal: n.is_internal,
+  }));
+}
+
+export async function addItemNote(
+  itemId: string,
+  body: string,
+  isInternal: boolean,
+  authorId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('item_notes')
+    .insert({ item_id: itemId, body, is_internal: isInternal, author_id: authorId });
+  if (error) throw error;
 }
 
 export async function updateItemFields(

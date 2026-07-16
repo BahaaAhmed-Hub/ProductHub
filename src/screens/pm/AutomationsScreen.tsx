@@ -1,30 +1,13 @@
-import { useState } from 'react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { useAutomations, useToggleAutomation } from '@/features/planning';
 
-interface Rule {
-  id: string;
-  name: string;
-  trigger: string;
-  action: string;
-  active: boolean;
-  runs: number;
-}
-
-const RULES: Rule[] = [
-  { id: 'a1', name: 'Auto-triage critical bugs', trigger: 'Request created · priority = Critical', action: 'Assign to on-call · notify #eng-critical', active: true, runs: 128 },
-  { id: 'a2', name: 'Escalate SLA at risk', trigger: 'SLA < 1h remaining', action: 'Notify manager · raise priority', active: true, runs: 43 },
-  { id: 'a3', name: 'Close stale queries', trigger: 'Query · no reply for 14 days', action: 'Mark resolved · email customer', active: false, runs: 7 },
-  { id: 'a4', name: 'Sync released items to Slack', trigger: 'Item moved to Released', action: 'Post to #product-updates', active: true, runs: 214 },
-];
-
-/** Screen 24 — PM automations (trigger → action rules). */
+/** Screen 24 — PM automations (trigger → action rules, real + persisted). */
 export function AutomationsScreen() {
-  const [rules, setRules] = useState(RULES);
-  const toggle = (id: string) =>
-    setRules((rs) => rs.map((r) => (r.id === id ? { ...r, active: !r.active } : r)));
+  const { automations: rules, isLoading } = useAutomations();
+  const toggleRule = useToggleAutomation();
 
   return (
     <>
@@ -38,6 +21,7 @@ export function AutomationsScreen() {
           <Button icon="add">New rule</Button>
         </div>
 
+        {isLoading && <div className="text-sm text-body">Loading…</div>}
         <div className="flex flex-col gap-2.5">
           {rules.map((r) => (
             <Card key={r.id} className="px-4 py-3.5 flex items-center gap-4">
@@ -58,7 +42,7 @@ export function AutomationsScreen() {
               </div>
               <span className="text-[11px] text-label font-mono flex-shrink-0">{r.runs} runs</span>
               <button
-                onClick={() => toggle(r.id)}
+                onClick={() => toggleRule(r.id, !r.active)}
                 className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
                   r.active ? 'bg-success' : 'bg-[#D6D5CF]'
                 }`}

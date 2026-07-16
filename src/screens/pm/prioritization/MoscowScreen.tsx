@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { TypeTag } from '@/components/ui/Tag';
-import { useBoardItems } from '@/features/board/hooks';
+import { useBoardItems, useUpdateItem } from '@/features/board/hooks';
+import type { BoardItem } from '@/features/board/types';
 import type { Priority } from '@/types/domain';
 
 type Bucket = 'must' | 'should' | 'could' | 'wont';
@@ -16,19 +17,19 @@ const COLS: { key: Bucket; label: string; color: string }[] = [
 const seedBucket = (p: Priority): Bucket =>
   p === 'critical' ? 'must' : p === 'high' ? 'should' : p === 'medium' ? 'could' : 'wont';
 
-/** Screen 53 — MoSCoW prioritization board. */
+// Bucket comes from persisted score_inputs.moscow, falling back to priority seed.
+const bucketOf = (i: BoardItem): Bucket => ((i.scoreInputs?.moscow as Bucket) ?? seedBucket(i.priority));
+
+/** Screen 53 — MoSCoW prioritization board (real, persisted to score_inputs.moscow). */
 export function MoscowScreen() {
   const { items } = useBoardItems();
-  const initial = useMemo(() => {
-    const m: Record<string, Bucket> = {};
-    items.forEach((i) => (m[i.id] = seedBucket(i.priority)));
-    return m;
-  }, [items]);
-  const [assign, setAssign] = useState<Record<string, Bucket>>(initial);
+  const update = useUpdateItem();
   const [dragId, setDragId] = useState<string | null>(null);
 
-  // keep in sync if items load after mount
-  const merged = { ...initial, ...assign };
+  async function assignTo(item: BoardItem, bucket: Bucket) {
+    if (bucketOf(item) === bucket) return;
+    await update(item.id, { scoreInputs: { ...(item.scoreInputs ?? {}), moscow: bucket } });
+  }
 
   return (
     <>
@@ -37,13 +38,14 @@ export function MoscowScreen() {
         <h1 className="text-lg font-semibold tracking-tight mb-4">MoSCoW · Q4 scope</h1>
         <div className="flex-1 grid grid-cols-4 gap-3 min-h-0">
           {COLS.map((col) => {
-            const colItems = items.filter((i) => merged[i.id] === col.key);
+            const colItems = items.filter((i) => bucketOf(i) === col.key);
             return (
               <div
                 key={col.key}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
-                  if (dragId) setAssign((a) => ({ ...a, [dragId]: col.key }));
+                  const it = items.find((i) => i.id === dragId);
+                  if (it) assignTo(it, col.key);
                   setDragId(null);
                 }}
                 className="flex flex-col min-h-0"

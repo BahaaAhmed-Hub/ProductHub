@@ -26,17 +26,36 @@ export interface PriModel {
   name: string;
   criteria: Criterion[];
 }
+export interface Automation {
+  id: string;
+  name: string;
+  trigger: string;
+  action: string;
+  active: boolean;
+  runs: number;
+}
+
+const DEFAULT_AUTOMATIONS: Omit<Automation, 'id'>[] = [
+  { name: 'Auto-triage critical bugs', trigger: 'Request created · priority = Critical', action: 'Assign to on-call · notify #eng-critical', active: true, runs: 0 },
+  { name: 'Escalate SLA at risk', trigger: 'SLA < 1h remaining', action: 'Notify manager · raise priority', active: true, runs: 0 },
+  { name: 'Close stale queries', trigger: 'Query · no reply for 14 days', action: 'Mark resolved · email customer', active: false, runs: 0 },
+  { name: 'Sync released items to Slack', trigger: 'Item moved to Released', action: 'Post to #product-updates', active: true, runs: 0 },
+];
 
 // ---------- mock fallback (local dev) ----------
 interface MockState {
   releases: Release[];
   sprints: Sprint[];
   models: PriModel[];
+  automations: Automation[];
   addRelease: (name: string) => void;
   addModel: (name: string, criteria: Criterion[]) => void;
   removeModel: (id: string) => void;
+  toggleAutomation: (id: string) => void;
 }
 const useMock = create<MockState>((set) => ({
+  automations: DEFAULT_AUTOMATIONS.map((a, i) => ({ ...a, id: `a${i}`, runs: [128, 43, 7, 214][i] ?? 0 })),
+  toggleAutomation: (id) => set((s) => ({ automations: s.automations.map((a) => (a.id === id ? { ...a, active: !a.active } : a)) })),
   releases: [
     { id: 'rel-43', name: 'Release 4.3', status: 'on_track', targetDate: 'Aug 12' },
     { id: 'rel-44', name: 'Release 4.4', status: 'planned', targetDate: 'Sep 9' },
@@ -110,6 +129,45 @@ export function useModels(): { models: PriModel[]; isLoading: boolean } {
   });
   if (isSupabaseConfigured) return { models: q.data ?? [], isLoading: q.isLoading };
   return { models: mock, isLoading: false };
+}
+
+export function useAutomations(): { automations: Automation[]; isLoading: boolean } {
+  const mock = useMock((s) => s.automations);
+  const { user } = useAuth();
+  const q = useQuery({
+    queryKey: ['automations'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<Automation[]> => {
+      const { data, error } = await supabase
+        .from('automations')
+        .select('id, name, trigger, action, active, runs')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      let rows = data as Automation[];
+      // First visit: provision the default rule set for this workspace.
+      if (rows.length === 0 && user?.workspaceId) {
+        await supabase.from('automations').insert(
+          DEFAULT_AUTOMATIONS.map((a) => ({ ...a, workspace_id: user.workspaceId })),
+        );
+        const re = await supabase.from('automations').select('id, name, trigger, action, active, runs').order('created_at', { ascending: true });
+        rows = (re.data as Automation[]) ?? [];
+      }
+      return rows;
+    },
+  });
+  if (isSupabaseConfigured) return { automations: q.data ?? [], isLoading: q.isLoading };
+  return { automations: mock, isLoading: false };
+}
+
+export function useToggleAutomation() {
+  const qc = useQueryClient();
+  const mock = useMock((s) => s.toggleAutomation);
+  return async (id: string, active: boolean) => {
+    if (!isSupabaseConfigured) return mock(id);
+    const { error } = await supabase.from('automations').update({ active }).eq('id', id);
+    if (error) throw error;
+    await qc.invalidateQueries({ queryKey: ['automations'] });
+  };
 }
 
 export function usePlanningActions() {

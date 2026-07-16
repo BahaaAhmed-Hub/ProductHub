@@ -3,8 +3,8 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
-import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields } from './api';
-import type { BoardItem, TriageRequest } from './types';
+import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields, listItemNotes, addItemNote } from './api';
+import type { BoardItem, ItemNote, TriageRequest } from './types';
 
 /** camelCase BoardItem fields → snake_case DB columns for updateItemFields. */
 const COLMAP: Record<string, string> = {
@@ -63,6 +63,40 @@ export function useUpdateItem() {
       return;
     }
     patch(id, fields);
+  };
+}
+
+export function useItemNotes(itemId: string | undefined): { notes: ItemNote[]; isLoading: boolean } {
+  const mock = useBoardStore((s) => (itemId ? s.notes[itemId] ?? [] : []));
+  const q = useQuery({
+    queryKey: ['notes', itemId],
+    queryFn: () => listItemNotes(itemId as string),
+    enabled: isSupabaseConfigured && !!itemId,
+  });
+  if (isSupabaseConfigured) return { notes: q.data ?? [], isLoading: q.isLoading };
+  return { notes: mock, isLoading: false };
+}
+
+export function useAddNote(itemId: string | undefined) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const mockAdd = useBoardStore((s) => s.addNote);
+  return async (body: string, internal: boolean): Promise<void> => {
+    if (!itemId) return;
+    if (isSupabaseConfigured) {
+      if (!user) throw new Error('Not authenticated');
+      await addItemNote(itemId, body, internal, user.id);
+      await qc.invalidateQueries({ queryKey: ['notes', itemId] });
+      return;
+    }
+    mockAdd(itemId, {
+      id: `n-${Date.now()}`,
+      author: user?.name ?? 'You',
+      initials: (user?.initials ?? 'YO').slice(0, 2),
+      ago: 'just now',
+      body,
+      internal,
+    });
   };
 }
 
