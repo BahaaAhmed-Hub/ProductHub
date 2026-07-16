@@ -49,16 +49,22 @@ async function resolveProfile(session: Session | null): Promise<User | null> {
   };
 }
 
+interface SignUpResult {
+  needsConfirmation: boolean;
+}
+
 interface AuthState {
   user: User | null;
   loading: boolean;
   mockMode: boolean;
   signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    opts: { name: string; role: Role },
+  ) => Promise<SignUpResult>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  /** Owner/preview control: change the active role. Persists to the profile in
-   * real mode; swaps the mock user in mock mode. */
-  switchRole: (role: Role) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -103,6 +109,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!profile) throw new Error('Signed in, but no workspace profile is linked to this account.');
         setUser(profile);
       },
+      async signUp(email, password, opts) {
+        if (!isSupabaseConfigured) {
+          setUser(MOCK_USERS[opts.role] ?? MOCK_USERS.customer);
+          return { needsConfirmation: false };
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          // The handle_new_user trigger reads name/role from user metadata to
+          // provision the profile + workspace.
+          options: { data: { name: opts.name, role: opts.role } },
+        });
+        if (error) throw error;
+        if (data.session) {
+          // Email confirmation disabled → signed in immediately.
+          const profile = await resolveProfile(data.session);
+          setUser(profile);
+          return { needsConfirmation: false };
+        }
+        // Confirmation required → user must verify via email, then sign in.
+        return { needsConfirmation: true };
+      },
       async signInWithGoogle() {
         if (!isSupabaseConfigured) {
           setUser(MOCK_USERS.customer);
@@ -118,19 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         if (isSupabaseConfigured) await supabase.auth.signOut();
+        queryClient.clear();
         setUser(null);
-      },
-      async switchRole(role) {
-        if (!isSupabaseConfigured) {
-          localStorage.setItem(MOCK_ROLE_KEY, role);
-          setUser(MOCK_USERS[role]);
-          return;
-        }
-        if (!user) return;
-        const { error } = await supabase.from('profiles').update({ role }).eq('id', user.id);
-        if (error) throw error;
-        queryClient.clear(); // role changes what RLS returns — drop cached data
-        setUser({ ...user, role });
       },
     }),
     [user, loading],

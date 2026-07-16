@@ -2,7 +2,6 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
 import { NotificationBell } from '@/components/ui/NotificationBell';
-import { DevRoleSwitcher } from './DevRoleSwitcher';
 import { useAuth } from '@/features/auth/AuthProvider';
 
 function crumb(pathname: string): string {
@@ -50,7 +49,6 @@ export function CustomerLayout() {
       <main className="flex-1 overflow-auto scroll-thin">
         <Outlet />
       </main>
-      <DevRoleSwitcher />
     </div>
   );
 }

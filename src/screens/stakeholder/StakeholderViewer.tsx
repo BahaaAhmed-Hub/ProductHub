@@ -3,7 +3,6 @@ import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { BUCKETS, useRoadmap } from '@/features/roadmap';
-import { DevRoleSwitcher } from '@/components/layout/DevRoleSwitcher';
 
 /** Screen 49 — Stakeholder read-only roadmap / evidence viewer. */
 export function StakeholderViewer() {
@@ -64,7 +63,6 @@ export function StakeholderViewer() {
       <footer className="h-14 flex items-center justify-center text-[11px] text-label border-t-[0.5px] border-hairline">
         Powered by ProductHub · shared by Orion Cloud
       </footer>
-      <DevRoleSwitcher />
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { DevRoleSwitcher } from './DevRoleSwitcher';
 
 /** Marketing-style shell for public surfaces (screens 07 roadmap, 08 release notes). */
 export function PublicLayout() {
@@ -32,7 +31,6 @@ export function PublicLayout() {
       <footer className="h-14 flex items-center justify-center text-[11px] text-label border-t-[0.5px] border-hairline">
         Powered by ProductHub · a product of Orion Cloud
       </footer>
-      <DevRoleSwitcher />
     </div>
   );
 }
