@@ -2,11 +2,13 @@ import { useNavigate } from 'react-router-dom';
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
 import { useBoardItems } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 
 const COLORS = ['#2FA869', '#46B6C9', '#7E78DD', '#E0644E', '#C49A3C', '#D97706'];
 
 /** Screen 54 — Value vs Effort 2×2 matrix. */
 export function ValueEffortScreen() {
+  const openItem = useItemPanel((s) => s.open);
   const navigate = useNavigate();
   const { items } = useBoardItems();
   const maxRice = Math.max(1, ...items.map((i) => i.riceScore ?? 0));
@@ -68,7 +70,7 @@ export function ValueEffortScreen() {
                     border: `1.5px solid ${COLORS[i % COLORS.length]}`,
                   }}
                   title={`${item.ref} · ${item.title}`}
-                  onClick={() => navigate(`/items/${item.id}`)}
+                  onClick={() => openItem(item.id)}
                 >
                   <span className="text-[8px] font-medium leading-tight px-1 text-ink/80">
                     {item.ref.split('-')[0]}

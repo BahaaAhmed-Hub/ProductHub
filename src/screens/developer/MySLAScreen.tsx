@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router-dom';
 import { TopNav } from '@/components/layout/TopNav';
 import { KPITile } from '@/components/ui/KPITile';
 import { PriorityTag } from '@/components/ui/Tag';
 import { useBoardItems } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 import type { BoardStatus, Priority } from '@/types/domain';
 import type { BoardItem } from '@/features/board/types';
 
@@ -29,7 +29,7 @@ function slaFor(item: BoardItem): Sla {
 
 /** Screen 14 — Developer personal SLA view (real, computed from item timestamps). */
 export function MySLAScreen() {
-  const navigate = useNavigate();
+  const openItem = useItemPanel((s) => s.open);
   const { items } = useBoardItems();
 
   const withSla = items.map((item) => ({ item, sla: slaFor(item) }));
@@ -67,7 +67,7 @@ export function MySLAScreen() {
             return (
               <div
                 key={item.id}
-                onClick={() => navigate(`/items/${item.id}`)}
+                onClick={() => openItem(item.id)}
                 className="grid grid-cols-[92px_1fr_110px_100px_130px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 cursor-pointer hover:bg-[#F7F7F5]"
               >
                 <span className="font-mono text-[11px] text-label">{item.ref}</span>

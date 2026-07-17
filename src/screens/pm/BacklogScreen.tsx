@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
@@ -8,6 +7,7 @@ import { Segmented } from '@/components/ui/Segmented';
 import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
 import { BOARD_COLUMNS } from '@/features/board/types';
 import { useBoardItems, useUpdateRice, useMoveItem } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 import { NewItemDialog } from '@/components/board/NewItemDialog';
 import type { BoardItem } from '@/features/board/types';
 import type { BoardStatus } from '@/types/domain';
@@ -24,7 +24,7 @@ const PLAN_LABEL: Record<string, string> = { backlog: 'Backlog', planned: 'Plann
 
 /** Screen 17 — PM backlog: list w/ inline RICE scoring, or kanban board. */
 export function BacklogScreen() {
-  const navigate = useNavigate();
+  const openItem = useItemPanel((s) => s.open);
   const { items, isLoading } = useBoardItems();
   const [view, setView] = useState<'list' | 'board'>('list');
   const [scoring, setScoring] = useState<string | null>(null);
@@ -75,9 +75,9 @@ export function BacklogScreen() {
         )}
 
         {!isLoading && items.length > 0 && view === 'list' && (
-          <ListView items={items} scoring={scoring} setScoring={setScoring} navigate={navigate} />
+          <ListView items={items} scoring={scoring} setScoring={setScoring} onOpen={openItem} />
         )}
-        {!isLoading && items.length > 0 && view === 'board' && <BoardView items={items} navigate={navigate} />}
+        {!isLoading && items.length > 0 && view === 'board' && <BoardView items={items} onOpen={openItem} />}
       </div>
 
       {showNewItem && <NewItemDialog onClose={() => setShowNewItem(false)} />}
@@ -89,12 +89,12 @@ function ListView({
   items,
   scoring,
   setScoring,
-  navigate,
+  onOpen,
 }: {
   items: BoardItem[];
   scoring: string | null;
   setScoring: (id: string | null) => void;
-  navigate: (path: string) => void;
+  onOpen: (id: string) => void;
 }) {
   return (
     <div className="bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame overflow-visible">
@@ -108,7 +108,7 @@ function ListView({
           className="relative grid grid-cols-[92px_1fr_84px_90px_70px_90px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 hover:bg-[#F7F7F5]"
         >
           <span className="font-mono text-[11px] text-label">{item.ref}</span>
-          <span className="text-[13px] font-medium truncate cursor-pointer" onClick={() => navigate(`/items/${item.id}`)}>
+          <span className="text-[13px] font-medium truncate cursor-pointer" onClick={() => onOpen(item.id)}>
             {item.title}
           </span>
           <span><TypeTag type={item.type} /></span>
@@ -131,7 +131,7 @@ function ListView({
   );
 }
 
-function BoardView({ items, navigate }: { items: BoardItem[]; navigate: (path: string) => void }) {
+function BoardView({ items, onOpen }: { items: BoardItem[]; onOpen: (id: string) => void }) {
   const move = useMoveItem();
   const [dragId, setDragId] = useState<string | null>(null);
 
@@ -163,7 +163,7 @@ function BoardView({ items, navigate }: { items: BoardItem[]; navigate: (path: s
                   draggable
                   onDragStart={() => setDragId(item.id)}
                   onDragEnd={() => setDragId(null)}
-                  onClick={() => navigate(`/items/${item.id}`)}
+                  onClick={() => onOpen(item.id)}
                   className={clsx(
                     'bg-surface border-[0.5px] border-hairline rounded-[10px] p-2.5 flex flex-col gap-1.5 cursor-grab active:cursor-grabbing hover:shadow-frame',
                     item.priority === 'critical' && 'border-l-2 border-l-danger',

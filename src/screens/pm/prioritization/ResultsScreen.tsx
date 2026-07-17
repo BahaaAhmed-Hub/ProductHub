@@ -3,6 +3,7 @@ import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
 import { TypeTag } from '@/components/ui/Tag';
 import { useBoardItems } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 import type { BoardItem } from '@/features/board/types';
 
 function rankBy(items: BoardItem[], get: (i: BoardItem) => number): Map<string, number> {
@@ -12,6 +13,7 @@ function rankBy(items: BoardItem[], get: (i: BoardItem) => number): Map<string, 
 
 /** Screen 56 — prioritization results: blended rank across RICE + WSJF. */
 export function ResultsScreen() {
+  const openItem = useItemPanel((s) => s.open);
   const navigate = useNavigate();
   const { items, isLoading } = useBoardItems();
 
@@ -48,7 +50,7 @@ export function ResultsScreen() {
             {rows.map(({ item, rr, wr, blended }, idx) => (
               <div
                 key={item.id}
-                onClick={() => navigate(`/items/${item.id}`)}
+                onClick={() => openItem(item.id)}
                 className="grid grid-cols-[50px_92px_1fr_84px_80px_80px_80px] gap-2 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 cursor-pointer hover:bg-[#F7F7F5]"
               >
                 <span className={`text-[15px] font-semibold ${idx === 0 ? 'text-success' : 'text-ink'}`}>{idx + 1}</span>

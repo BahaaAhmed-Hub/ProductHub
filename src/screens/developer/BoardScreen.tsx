@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { Avatar } from '@/components/ui/Avatar';
@@ -8,11 +7,12 @@ import { TypeTag, PriorityTag } from '@/components/ui/Tag';
 import { NewItemDialog } from '@/components/board/NewItemDialog';
 import { BOARD_COLUMNS, type BoardItem } from '@/features/board/types';
 import { useBoardItems, useMoveItem } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 import type { BoardStatus } from '@/types/domain';
 
 /** Screen 10 — Developer kanban board with native drag-and-drop. */
 export function BoardScreen() {
-  const navigate = useNavigate();
+  const openItem = useItemPanel((s) => s.open);
   const { items, isLoading } = useBoardItems();
   const move = useMoveItem();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -99,7 +99,7 @@ export function BoardScreen() {
                       item={item}
                       onDragStart={() => setDragId(item.id)}
                       onDragEnd={() => setDragId(null)}
-                      onOpen={() => navigate(`/items/${item.id}`)}
+                      onOpen={() => openItem(item.id)}
                     />
                   ))}
                   {isLoading && <div className="text-xs text-label px-1 py-2">Loading…</div>}

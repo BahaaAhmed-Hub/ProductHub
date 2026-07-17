@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { Eyebrow } from '@/components/ui/Card';
 import { Tag } from '@/components/ui/Tag';
 import { useBoardItems, useMoveItem, useAddNote } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 
 /** Screen 13 — Developer QA & release. Picks the next in-QA item; releasing is real. */
 export function QAReleaseScreen() {
   const navigate = useNavigate();
+  const openItem = useItemPanel((s) => s.open);
   const { items } = useBoardItems();
   const move = useMoveItem();
   const item = items.find((i) => i.boardStatus === 'in_qa') ?? items.find((i) => i.boardStatus !== 'released');
@@ -23,7 +25,8 @@ export function QAReleaseScreen() {
     try {
       if (notes.trim()) await addNote(notes.trim(), false); // external release note
       await move(item.id, 'released');
-      navigate(`/items/${item.id}`);
+      navigate('/board');
+      openItem(item.id);
     } finally {
       setReleasing(false);
     }
@@ -89,7 +92,7 @@ export function QAReleaseScreen() {
           </div>
 
           <div className="mt-5 flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => navigate(`/items/${item.id}`)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => navigate('/board')}>Cancel</Button>
             <Button
               variant="primary" icon="bolt" disabled={releasing}
               className="bg-success hover:bg-[#178a63]"

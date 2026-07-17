@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { PriorityTag } from '@/components/ui/Tag';
 import { BOARD_COLUMNS } from '@/features/board/types';
 import { useBoardItems, useMoveItem } from '@/features/board/hooks';
+import { useItemPanel } from '@/features/board/panelStore';
 import type { BoardStatus } from '@/types/domain';
 
 /** Screen 23 — board grouped into swimlanes (real). Drag cards to change status. */
 export function SwimlanesScreen() {
-  const navigate = useNavigate();
+  const openItem = useItemPanel((s) => s.open);
   const { items } = useBoardItems();
   const move = useMoveItem();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export function SwimlanesScreen() {
                       key={item.id}
                       draggable
                       onDragStart={() => setDragId(item.id)}
-                      onClick={() => navigate(`/items/${item.id}`)}
+                      onClick={() => openItem(item.id)}
                       className={clsx('bg-surface border-[0.5px] border-hairline rounded-[8px] p-2 flex flex-col gap-1 cursor-grab active:cursor-grabbing', item.priority === 'critical' && 'border-l-2 border-l-danger')}
                     >
                       <div className="flex items-center justify-between">
