@@ -89,11 +89,17 @@ export const router = createHashRouter([
             children: [
               { path: '/board', element: <BoardScreen /> },
               { path: '/triage', element: <TriageInboxScreen /> },
-              { path: '/items/:id', element: <ItemDetailScreen /> },
               { path: '/my-items', element: <MySLAScreen /> },
               { path: '/qa', element: <QAReleaseScreen /> },
               { path: '/sla', element: <MySLAScreen /> },
             ],
+          },
+          // Item detail: any internal role that can see a board (developer,
+          // PM, manager) can open a card's detail — the board/backlog/swimlanes
+          // screens across those roles all link here.
+          {
+            element: <RequireRole roles={['developer', 'pm', 'manager']} />,
+            children: [{ path: '/items/:id', element: <ItemDetailScreen /> }],
           },
           // PM / Manager (M3)
           {

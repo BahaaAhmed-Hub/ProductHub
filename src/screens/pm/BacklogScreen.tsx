@@ -142,7 +142,7 @@ function BoardView({ items, navigate }: { items: BoardItem[]; navigate: (path: s
         return (
           <div
             key={col.status}
-            className="flex-1 flex flex-col gap-2 min-w-0"
+            className="flex-1 flex flex-col gap-2 min-w-0 border-[0.5px] border-hairline rounded-frame bg-surface/50 p-2"
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => {
               if (dragId) move(dragId, col.status as BoardStatus);

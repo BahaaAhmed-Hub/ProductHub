@@ -25,7 +25,11 @@ export function Tag({
   return (
     <span
       className={clsx(
-        'inline-flex items-center h-4 px-2 rounded-full text-[10px] font-medium leading-none',
+        // self-start + w-fit: a flex item with display:inline-flex still gets
+        // blockified and stretched to the cross-axis size by the parent's
+        // default align-items:stretch — pin it to content width so it never
+        // spans the full card when the parent is a flex column.
+        'inline-flex items-center self-start w-fit h-4 px-2 rounded-full text-[10px] font-medium leading-none flex-shrink-0',
         tones[tone],
         className,
       )}

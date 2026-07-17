@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
@@ -19,6 +19,19 @@ export function ReleaseTreeScreen() {
   const actions = usePlanningActions();
   const [view, setView] = useState<'list' | 'board'>('list');
   const [newRel, setNewRel] = useState('');
+  const [needsName, setNeedsName] = useState(false);
+  const newRelInput = useRef<HTMLInputElement>(null);
+
+  function submitRelease() {
+    if (!newRel.trim()) {
+      setNeedsName(true);
+      newRelInput.current?.focus();
+      return;
+    }
+    setNeedsName(false);
+    actions.addRelease(newRel.trim());
+    setNewRel('');
+  }
 
   const groups = [
     ...releases.map((r) => ({ id: r.id, name: r.name, status: r.status, items: items.filter((i) => i.releaseId === r.id) })),
@@ -40,17 +53,26 @@ export function ReleaseTreeScreen() {
         notificationCount={4}
       />
       <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
-        <div className="flex items-center gap-2 mb-4 max-w-md">
-          <input
-            value={newRel}
-            onChange={(e) => setNewRel(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && newRel.trim()) { actions.addRelease(newRel.trim()); setNewRel(''); } }}
-            placeholder="New release name…"
-            className="flex-1 h-9 px-3 rounded-control border-[0.5px] border-hairline text-sm outline-none focus:border-accent"
-          />
-          <Button icon="add" disabled={!newRel.trim()} onClick={() => { actions.addRelease(newRel.trim()); setNewRel(''); }}>
-            Add release
-          </Button>
+        <div className="mb-4 max-w-md">
+          <div className="flex items-center gap-2">
+            <input
+              ref={newRelInput}
+              value={newRel}
+              onChange={(e) => {
+                setNewRel(e.target.value);
+                if (needsName) setNeedsName(false);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && submitRelease()}
+              placeholder="New release name…"
+              className={`flex-1 h-9 px-3 rounded-control border-[0.5px] text-sm outline-none focus:border-accent ${
+                needsName ? 'border-danger' : 'border-hairline'
+              }`}
+            />
+            <Button icon="add" onClick={submitRelease}>
+              Add release
+            </Button>
+          </div>
+          {needsName && <p className="text-[12px] text-danger mt-1">Give the release a name first.</p>}
         </div>
 
         <div className={view === 'board' ? 'flex gap-3 items-start' : 'flex flex-col gap-4 max-w-4xl'}>
