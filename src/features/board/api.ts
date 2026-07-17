@@ -172,3 +172,41 @@ export async function addRequestToBoard(
   const { error: updErr } = await supabase.from('requests').update({ status: 'triaged' }).eq('id', t.id);
   if (updErr) throw updErr;
 }
+
+const ITEM_PREFIX: Record<RequestType, string> = { bug: 'BUG', feature: 'FEAT', query: 'TASK' };
+
+export interface NewItemDraft {
+  title: string;
+  type: RequestType;
+  priority: Priority;
+  swimlane?: string;
+}
+
+/** Directly create a backlog item (PM/Manager/Developer authoring a task,
+ * with no originating customer request). */
+export async function createBoardItem(
+  draft: NewItemDraft,
+  workspaceId: string,
+): Promise<BoardItem> {
+  const ref = `${ITEM_PREFIX[draft.type]}-${String(Math.floor(Math.abs(Date.now()) % 10000)).padStart(4, '0')}`;
+  const { data, error } = await supabase
+    .from('backlog_items')
+    .insert({
+      workspace_id: workspaceId,
+      ref,
+      title: draft.title,
+      type: draft.type,
+      priority: draft.priority,
+      board_status: 'triaged',
+      plan_bucket: 'backlog',
+      ...(draft.swimlane ? { swimlane: draft.swimlane } : {}),
+    })
+    .select(ITEM_SELECT)
+    .single();
+  if (error) throw error;
+  const r = data as unknown as ItemRow;
+  return {
+    id: r.id, ref: r.ref, title: r.title, type: r.type, boardStatus: r.board_status, priority: r.priority,
+    ...(r.plan_bucket ? { planBucket: r.plan_bucket } : {}),
+  };
+}

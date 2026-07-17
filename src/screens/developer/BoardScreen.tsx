@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { Avatar } from '@/components/ui/Avatar';
+import { Button } from '@/components/ui/Button';
 import { TypeTag, PriorityTag } from '@/components/ui/Tag';
+import { NewItemDialog } from '@/components/board/NewItemDialog';
 import { BOARD_COLUMNS, type BoardItem } from '@/features/board/types';
 import { useBoardItems, useMoveItem } from '@/features/board/hooks';
 import type { BoardStatus } from '@/types/domain';
@@ -15,6 +17,7 @@ export function BoardScreen() {
   const move = useMoveItem();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCol, setOverCol] = useState<BoardStatus | null>(null);
+  const [showNewItem, setShowNewItem] = useState(false);
 
   const done = items.filter((i) => i.boardStatus === 'released').length;
   const pct = items.length ? Math.round((done / items.length) * 100) : 0;
@@ -36,9 +39,9 @@ export function BoardScreen() {
           </div>
         }
         actions={
-          <span className="inline-flex items-center h-[18px] px-2 rounded-full text-[11px] font-medium bg-accent-soft text-accent">
-            14 days left
-          </span>
+          <Button variant="secondary" icon="add" onClick={() => setShowNewItem(true)}>
+            New item
+          </Button>
         }
         notificationCount={4}
       />
@@ -106,6 +109,7 @@ export function BoardScreen() {
           })}
         </div>
       </div>
+      {showNewItem && <NewItemDialog onClose={() => setShowNewItem(false)} />}
     </>
   );
 }

@@ -3,7 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
-import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields, listItemNotes, addItemNote } from './api';
+import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields, listItemNotes, addItemNote, createBoardItem, type NewItemDraft } from './api';
 import type { BoardItem, ItemNote, TriageRequest } from './types';
 
 /** camelCase BoardItem fields → snake_case DB columns for updateItemFields. */
@@ -97,6 +97,21 @@ export function useAddNote(itemId: string | undefined) {
       body,
       internal,
     });
+  };
+}
+
+export function useCreateItem() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const mockAdd = useBoardStore((s) => s.addManualItem);
+  return async (draft: NewItemDraft): Promise<void> => {
+    if (isSupabaseConfigured) {
+      if (!user) throw new Error('Not authenticated');
+      await createBoardItem(draft, user.workspaceId);
+      await qc.invalidateQueries({ queryKey: ['board'] });
+      return;
+    }
+    mockAdd(draft);
   };
 }
 

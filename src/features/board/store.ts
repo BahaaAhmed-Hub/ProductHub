@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { BoardStatus } from '@/types/domain';
 import type { BoardItem, ItemNote, TriageRequest } from './types';
+import type { NewItemDraft } from './api';
 import { MOCK_BOARD_ITEMS, MOCK_TRIAGE_REQUESTS, MOCK_NOTES } from './mockData';
 
 /** Mock-mode board/triage state so the developer flow is walkable without Supabase. */
@@ -10,6 +11,7 @@ interface BoardState {
   notes: Record<string, ItemNote[]>;
   moveItem: (id: string, status: BoardStatus) => void;
   addToBoard: (t: TriageRequest) => void;
+  addManualItem: (draft: NewItemDraft) => void;
   setRice: (id: string, score: number) => void;
   patch: (id: string, fields: Partial<BoardItem>) => void;
   addNote: (itemId: string, note: ItemNote) => void;
@@ -29,6 +31,26 @@ export const useBoardStore = create<BoardState>((set) => ({
         ...s.items,
       ],
     })),
+  addManualItem: (draft) =>
+    set((s) => {
+      const prefix = draft.type === 'bug' ? 'BUG' : draft.type === 'feature' ? 'FEAT' : 'TASK';
+      const ref = `${prefix}-${String(1000 + s.items.length).padStart(4, '0')}`;
+      return {
+        items: [
+          {
+            id: `manual-${Date.now()}`,
+            ref,
+            title: draft.title,
+            type: draft.type,
+            boardStatus: 'triaged' as BoardStatus,
+            priority: draft.priority,
+            planBucket: 'backlog',
+            ...(draft.swimlane ? { swimlane: draft.swimlane } : {}),
+          },
+          ...s.items,
+        ],
+      };
+    }),
   setRice: (id, score) =>
     set((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, riceScore: score } : i)) })),
   patch: (id, fields) =>
