@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -65,18 +66,70 @@ interface AuthState {
   signUp: (
     email: string,
     password: string,
-    opts: { name: string; role: Role; inviteCode?: string },
+    opts: { name: string; role?: Role; inviteCode?: string; joinKey?: string },
   ) => Promise<SignUpResult>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (opts?: { inviteCode?: string; joinKey?: string }) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Pending user correcting their auto/self-chosen requested role before a
+   * manager reviews it (e.g. Google SSO can't show the PM/Developer picker
+   * before account creation, so it defaults to PM). */
+  updateRequestedRole: (role: Role) => Promise<void>;
+  refreshUser: () => Promise<void>;
+  /** True for one render cycle after a pending user's access is approved —
+   * survives the role-change redirect since it lives here, above the
+   * layout that would otherwise unmount before the user sees it. */
+  justApproved: boolean;
+  dismissApproval: () => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
 const MOCK_ROLE_KEY = 'ph.mockRole';
+const PENDING_JOIN_KEY = 'ph.pendingJoin';
+const PENDING_INVITE_KEY = 'ph.pendingInvite';
+
+/** Google OAuth can't carry our custom user_metadata pre-account-creation,
+ * so handle_new_user() falls through to domain-based staff provisioning for
+ * a join/invite signup done via Google. Re-home the profile via RPC once
+ * the session comes back, using the key stashed before the redirect. */
+async function consumePendingJoin(): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const joinKey = sessionStorage.getItem(PENDING_JOIN_KEY);
+  const inviteCode = sessionStorage.getItem(PENDING_INVITE_KEY);
+  if (!joinKey && !inviteCode) return;
+  sessionStorage.removeItem(PENDING_JOIN_KEY);
+  sessionStorage.removeItem(PENDING_INVITE_KEY);
+  try {
+    await supabase.rpc('apply_pending_join', {
+      p_key: joinKey ?? inviteCode,
+      p_kind: joinKey ? 'join' : 'invite',
+    });
+  } catch {
+    // Best-effort — if this fails the user still has a valid (if
+    // mis-provisioned) account and can be fixed up manually.
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [justApproved, setJustApproved] = useState(false);
+  const wasPendingRef = useRef(false);
+
+  useEffect(() => {
+    if (user?.status === 'pending') wasPendingRef.current = true;
+    if (wasPendingRef.current && user?.status === 'active') {
+      setJustApproved(true);
+      wasPendingRef.current = false;
+    }
+  }, [user?.status]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || user?.status !== 'pending') return;
+    const id = setInterval(() => {
+      supabase.auth.getSession().then(async ({ data }) => setUser(await resolveProfile(data.session)));
+    }, 15_000);
+    return () => clearInterval(id);
+  }, [user?.status]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -88,10 +141,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     supabase.auth.getSession().then(async ({ data }) => {
+      await consumePendingJoin();
       setUser(await resolveProfile(data.session));
       setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange(async (_e, session) => {
+      await consumePendingJoin();
       setUser(await resolveProfile(session));
     });
     return () => sub.subscription.unsubscribe();
@@ -115,16 +170,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signUp(email, password, opts) {
         if (!isSupabaseConfigured) {
-          setUser(MOCK_USERS[opts.role] ?? MOCK_USERS.customer);
+          setUser(MOCK_USERS[opts.role ?? 'customer'] ?? MOCK_USERS.customer);
           return { needsConfirmation: false };
         }
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          // The handle_new_user trigger reads name/role/invite_code from user
-          // metadata to provision the profile + workspace. An invite_code, if
-          // valid, takes priority over the role/domain logic.
-          options: { data: { name: opts.name, role: opts.role, invite_code: opts.inviteCode } },
+          // The handle_new_user trigger reads name/role/invite_code/join_code
+          // from user metadata to provision the profile + workspace. Priority:
+          // join_code/join_slug (end-user) > invite_code (stakeholder link) >
+          // role/domain logic (staff).
+          options: {
+            data: {
+              name: opts.name,
+              role: opts.role,
+              invite_code: opts.inviteCode,
+              join_code: opts.joinKey,
+            },
+          },
         });
         if (error) throw error;
         if (data.session) {
@@ -136,11 +199,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Confirmation required → user must verify via email, then sign in.
         return { needsConfirmation: true };
       },
-      async signInWithGoogle() {
+      async signInWithGoogle(opts) {
         if (!isSupabaseConfigured) {
           setUser(MOCK_USERS.customer);
           return;
         }
+        // Stash the invite/join key so it can be applied after the OAuth
+        // redirect returns (Google doesn't let us pass custom user_metadata
+        // through the provider — raw_user_meta_data is populated from
+        // Google's own profile fields only).
+        if (opts?.inviteCode) sessionStorage.setItem('ph.pendingInvite', opts.inviteCode);
+        if (opts?.joinKey) sessionStorage.setItem('ph.pendingJoin', opts.joinKey);
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           // Return to the app root (strip any hash route). PKCE flow returns a
@@ -154,8 +223,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         queryClient.clear();
         setUser(null);
       },
+      async updateRequestedRole(role) {
+        if (!isSupabaseConfigured || !user) return;
+        const { error } = await supabase.from('profiles').update({ requested_role: role }).eq('id', user.id);
+        if (error) throw error;
+        setUser({ ...user, requestedRole: role });
+      },
+      async refreshUser() {
+        if (!isSupabaseConfigured) return;
+        const { data } = await supabase.auth.getSession();
+        setUser(await resolveProfile(data.session));
+      },
+      justApproved,
+      dismissApproval() {
+        setJustApproved(false);
+      },
     }),
-    [user, loading],
+    [user, loading, justApproved],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

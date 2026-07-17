@@ -26,7 +26,6 @@ export function TeamPerformanceScreen() {
   const { invites } = useInvites();
   const inviteActions = useInviteActions();
   const [busy, setBusy] = useState<string | null>(null);
-  const [inviteRole, setInviteRole] = useState<Role>('developer');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function act(m: PendingMember, kind: 'approve' | 'decline') {
@@ -42,7 +41,10 @@ export function TeamPerformanceScreen() {
   async function onCreateInvite() {
     setBusy('new-invite');
     try {
-      await inviteActions.create(inviteRole);
+      // Manager/PM/Developer come in purely via company-domain signup +
+      // approval, and Customer via the join code/link (Settings → Customers).
+      // The only role left for a manual invite link is Stakeholder.
+      await inviteActions.create('stakeholder');
     } finally {
       setBusy(null);
     }
@@ -94,23 +96,17 @@ export function TeamPerformanceScreen() {
           </Card>
         )}
 
-        {/* Invite links */}
+        {/* Stakeholder invite link — the only role a manager hands out
+            manually; Manager/PM/Developer come via domain signup + approval,
+            Customer via the join code/link under Settings → Customers. */}
         <Card className="p-5 max-w-3xl mb-4">
-          <div className="text-sm font-semibold mb-3">Invite by link</div>
-          <div className="flex items-center gap-2 mb-4">
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as Role)}
-              className="h-9 px-3 rounded-control border-[0.5px] border-hairline bg-surface text-[13px] outline-none"
-            >
-              {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-            </select>
-            <Button icon="add" disabled={busy === 'new-invite'} onClick={onCreateInvite}>
-              {busy === 'new-invite' ? 'Creating…' : 'Create invite link'}
-            </Button>
-          </div>
+          <div className="text-sm font-semibold mb-1">Invite a stakeholder</div>
+          <p className="text-[12.5px] text-label mb-3">Read-only access to the published roadmap — no approval needed.</p>
+          <Button icon="add" disabled={busy === 'new-invite'} onClick={onCreateInvite} className="mb-4">
+            {busy === 'new-invite' ? 'Creating…' : 'Create invite link'}
+          </Button>
           {invites.length === 0 ? (
-            <p className="text-[13px] text-body">No active invite links. Create one above — anyone with the link joins your workspace with the chosen role.</p>
+            <p className="text-[13px] text-body">No active invite links.</p>
           ) : (
             invites.map((inv) => (
               <div key={inv.id} className="flex items-center gap-3 py-2 border-b-[0.5px] border-hairline last:border-0">

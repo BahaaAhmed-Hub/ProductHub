@@ -5,6 +5,7 @@ import {
   CircleHelp, Inbox, LineChart, Flame, LogOut, Map, Mic, Bell, Clock,
   FlaskConical, Search, Repeat, ScrollText, SlidersHorizontal, TrendingUp,
   TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight, Copy,
+  Link2, Rocket, Building2, HourglassIcon, CircleCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -60,6 +61,12 @@ const MAP: Record<string, LucideIcon> = {
   view_kanban: SquareKanban,
   view_week: Columns3,
   content_copy: Copy,
+  key: KeyRound,
+  link: Link2,
+  rocket_launch: Rocket,
+  apartment: Building2,
+  hourglass_top: HourglassIcon,
+  check_circle: CircleCheck,
 };
 
 interface IconProps {

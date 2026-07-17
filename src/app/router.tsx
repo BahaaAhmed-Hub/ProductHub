@@ -5,6 +5,8 @@ import { PublicLayout } from '@/components/layout/PublicLayout';
 import { RequireAuth, RequireRole } from '@/features/auth/guards';
 import { RoleIndex } from '@/features/auth/RoleIndex';
 import { SignInScreen } from '@/screens/customer/SignInScreen';
+import { SignupScreen } from '@/screens/customer/SignupScreen';
+import { JoinScreen } from '@/screens/customer/JoinScreen';
 import { SubmitRequestScreen } from '@/screens/customer/SubmitRequestScreen';
 import { ConfirmationScreen } from '@/screens/customer/ConfirmationScreen';
 import { MyRequestsScreen } from '@/screens/customer/MyRequestsScreen';
@@ -29,6 +31,7 @@ import { ReleaseTreeScreen } from '@/screens/pm/ReleaseTreeScreen';
 import { SwimlanesScreen } from '@/screens/pm/SwimlanesScreen';
 import { SLABreachesScreen } from '@/screens/manager/SLABreachesScreen';
 import { TeamPerformanceScreen } from '@/screens/manager/TeamPerformanceScreen';
+import { CustomersScreen } from '@/screens/manager/CustomersScreen';
 import { ReportsScreen } from '@/screens/manager/ReportsScreen';
 import { RoleDashboard } from '@/screens/RoleDashboard';
 import { AnalyticsHome } from '@/screens/analytics/AnalyticsHome';
@@ -44,6 +47,9 @@ import { PlansScreen } from '@/screens/marketing/PlansScreen';
  */
 export const router = createHashRouter([
   { path: '/signin', element: <SignInScreen /> },
+  { path: '/signup', element: <SignupScreen /> },
+  { path: '/join', element: <JoinScreen /> },
+  { path: '/join/:slug', element: <JoinScreen /> },
   { path: '/plans', element: <PlansScreen /> },
   {
     element: <RequireAuth />,
@@ -111,6 +117,7 @@ export const router = createHashRouter([
               // Manager oversight (M5)
               { path: '/sla-breaches', element: <SLABreachesScreen /> },
               { path: '/team', element: <TeamPerformanceScreen /> },
+              { path: '/customers', element: <CustomersScreen /> },
               { path: '/reports', element: <ReportsScreen /> },
               { path: '/pm/roadmap', element: <RoadmapScreen /> },
               { path: '/pm/releases', element: <ReleaseTreeScreen /> },

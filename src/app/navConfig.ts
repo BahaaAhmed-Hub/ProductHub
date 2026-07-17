@@ -76,6 +76,7 @@ export const NAV: Record<Role, NavSection[]> = {
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
         { label: 'SLA Breaches', icon: 'error', path: '/sla-breaches' },
         { label: 'Team & Members', icon: 'groups', path: '/team' },
+        { label: 'Customers', icon: 'apartment', path: '/customers' },
         { label: 'Reports', icon: 'summarize', path: '/reports' },
       ],
     },
