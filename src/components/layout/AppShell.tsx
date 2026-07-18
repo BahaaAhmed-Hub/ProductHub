@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar';
 import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ItemDetailPanel } from '@/components/board/ItemDetailPanel';
+import { AsanaOAuthGate } from '@/features/integrations/AsanaOAuthGate';
 
 const ROLE_LABEL: Record<string, string> = {
   customer: 'Customer', developer: 'Developer', pm: 'Product Manager', manager: 'Manager', stakeholder: 'Stakeholder',
@@ -31,6 +32,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <ItemDetailPanel />
+      <AsanaOAuthGate />
     </div>
   );
 }

@@ -14,6 +14,27 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Capture an Asana OAuth return (?code&state=asana:...) before the
+      // Supabase client loads — its own detectSessionInUrl also scans for a
+      // "?code=" param (Google sign-in uses the same redirect-URI shape) and
+      // would otherwise race this and strip the query string first. Runs as
+      // a plain synchronous script, which always executes before the
+      // deferred module script below, so there's no race to lose.
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var code = params.get('code');
+        var state = params.get('state');
+        if (code && state && state.indexOf('asana:') === 0) {
+          sessionStorage.setItem('ph.asanaOAuthCode', code);
+          sessionStorage.setItem('ph.asanaOAuthState', state);
+          var url = new URL(window.location.href);
+          url.searchParams.delete('code');
+          url.searchParams.delete('state');
+          window.history.replaceState({}, '', url.toString());
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

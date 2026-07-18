@@ -3,9 +3,12 @@ name: Deploy Edge Functions
 # Deploys supabase/functions/* to the Supabase project and sets their secrets.
 # Runs on a GitHub runner (open internet) using the Supabase CLI.
 # Requires repo secrets:
-#   SUPABASE_ACCESS_TOKEN  — supabase.com/dashboard/account/tokens
-#   ANTHROPIC_API_KEY      — for the ai-summary function
-#   (later: SLACK_WEBHOOK_URL, ASANA_CLIENT_ID/SECRET, POSTHOG_* as functions are added)
+#   SUPABASE_ACCESS_TOKEN         — supabase.com/dashboard/account/tokens
+#   ANTHROPIC_API_KEY             — for the ai-summary function
+#   ASANA_CLIENT_ID/CLIENT_SECRET — app.asana.com/0/developer-console; redirect URI
+#                                    must be registered there as this app's exact
+#                                    origin (e.g. https://<user>.github.io/ProductHub/)
+#   (later: SLACK_WEBHOOK_URL, POSTHOG_* as functions are added)
 
 on:
   workflow_dispatch:
@@ -41,11 +44,18 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ASANA_CLIENT_ID: ${{ secrets.ASANA_CLIENT_ID }}
+          ASANA_CLIENT_SECRET: ${{ secrets.ASANA_CLIENT_SECRET }}
         run: |
           if [ -n "$ANTHROPIC_API_KEY" ]; then
             supabase secrets set "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" --project-ref "$PROJECT_REF"
           else
             echo "::warning::ANTHROPIC_API_KEY not set — ai-summary will return a config error until it is."
+          fi
+          if [ -n "$ASANA_CLIENT_ID" ] && [ -n "$ASANA_CLIENT_SECRET" ]; then
+            supabase secrets set "ASANA_CLIENT_ID=$ASANA_CLIENT_ID" "ASANA_CLIENT_SECRET=$ASANA_CLIENT_SECRET" --project-ref "$PROJECT_REF"
+          else
+            echo "::warning::ASANA_CLIENT_ID/ASANA_CLIENT_SECRET not set — Connect Asana will return a config error until they are."
           fi
 
       - name: Deploy functions
