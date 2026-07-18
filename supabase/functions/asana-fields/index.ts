@@ -1,10 +1,11 @@
-// ProductHub — discover every mappable field on the connected Asana
-// project: its board sections, every custom field regardless of type
-// (text/number/date/people/enum/multi_enum — per Asana's task resource:
-// https://developers.asana.com/reference/tasks), and a handful of built-in
-// task fields that don't otherwise have a home in ProductHub's schema.
-// Never hardcoded to a fixed field list — a project's actual custom fields
-// are fetched live, so a new one shows up here with no code change.
+// ProductHub — discover every mappable field on one Asana project (the
+// caller passes projectGid, since a workspace can have several added — see
+// integration_projects): its board sections, every custom field regardless
+// of type (text/number/date/people/enum/multi_enum — per Asana's task
+// resource: https://developers.asana.com/reference/tasks), and a handful of
+// built-in task fields that don't otherwise have a home in ProductHub's
+// schema. Never hardcoded to a fixed field list — a project's actual custom
+// fields are fetched live, so a new one shows up here with no code change.
 import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient, requireManager } from '../_shared/authedClient.ts';
 import { asanaFetch, ensureFreshToken } from '../_shared/asana.ts';
@@ -51,6 +52,10 @@ const BUILTIN_FIELDS: Field[] = [
   { sourceField: '__permalink__', label: 'Asana link', kind: 'other', options: [] },
 ];
 
+interface Body {
+  projectGid: string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -60,23 +65,39 @@ Deno.serve(async (req) => {
   const caller = await requireManager(supabase);
   if (!caller) return json({ error: 'Only a workspace Manager can view integration settings.' }, 403);
 
+  let body: Body;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: 'Invalid JSON body.' }, 400);
+  }
+  if (!body.projectGid) return json({ error: 'Missing "projectGid".' }, 400);
+
   const { data: connection, error } = await supabase
     .from('integration_connections')
-    .select('id, access_token, refresh_token, expires_at, external_project_gid')
+    .select('id, access_token, refresh_token, expires_at')
     .eq('workspace_id', caller.workspaceId)
     .eq('provider', 'asana')
     .maybeSingle();
   if (error) return json({ error: error.message }, 500);
   if (!connection) return json({ error: 'Asana is not connected for this workspace.' }, 404);
-  if (!connection.external_project_gid) return json({ error: 'Pick an Asana project first.' }, 400);
+
+  const { data: project, error: projectError } = await supabase
+    .from('integration_projects')
+    .select('external_project_gid')
+    .eq('connection_id', connection.id)
+    .eq('external_project_gid', body.projectGid)
+    .maybeSingle();
+  if (projectError) return json({ error: projectError.message }, 500);
+  if (!project) return json({ error: 'That project is not added to this workspace.' }, 404);
 
   try {
     const accessToken = await ensureFreshToken(supabase, connection);
     const [sections, fieldSettings] = await Promise.all([
-      asanaFetch(accessToken, `/projects/${connection.external_project_gid}/sections`) as Promise<AsanaSection[]>,
+      asanaFetch(accessToken, `/projects/${body.projectGid}/sections`) as Promise<AsanaSection[]>,
       asanaFetch(
         accessToken,
-        `/projects/${connection.external_project_gid}/custom_field_settings?opt_fields=custom_field.name,custom_field.resource_subtype,custom_field.enum_options.name`,
+        `/projects/${body.projectGid}/custom_field_settings?opt_fields=custom_field.name,custom_field.resource_subtype,custom_field.enum_options.name`,
       ) as Promise<AsanaCustomFieldSetting[]>,
     ]);
 

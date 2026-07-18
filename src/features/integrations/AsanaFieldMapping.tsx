@@ -115,16 +115,19 @@ function FieldMappingRow({
   );
 }
 
-/** Lets a Manager map whatever fields the connected Asana project actually
- * has — sections, every custom field regardless of type, and a few
- * built-in task fields — discovered live, nothing hardcoded. Enum-kind
- * fields (sections, enum custom fields) translate into status/priority/type
- * value by value; any field can also become a real custom field (shown on
- * the item detail panel) or be appended to the description. All changes
- * are staged locally and written with the single Save button below —
- * there's no per-row save. */
-export function AsanaFieldMapping({ onClose }: { onClose: () => void }) {
-  const { fields, isLoading, load } = useAsanaFields();
+/** Lets a Manager map whatever fields the given Asana project (one of
+ * possibly several added — the caller picks which) actually has — sections,
+ * every custom field regardless of type, and a few built-in task fields —
+ * discovered live, nothing hardcoded. Enum-kind fields (sections, enum
+ * custom fields) translate into status/priority/type value by value; any
+ * field can also become a real custom field (shown on the item detail
+ * panel) or be appended to the description. Mappings are workspace-wide,
+ * not per-project — a source field gid is already project-specific (Asana
+ * never reuses one across projects), so the same mapping table naturally
+ * covers every added project without extra scoping. All changes are staged
+ * locally and written with the single Save button below — no per-row save. */
+export function AsanaFieldMapping({ projectGid, onClose }: { projectGid: string; onClose: () => void }) {
+  const { fields, isLoading, load } = useAsanaFields(projectGid);
   const { mappings } = useFieldMappings();
   const actions = useFieldMappingActions();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
@@ -134,8 +137,11 @@ export function AsanaFieldMapping({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     load();
+    // Reset drafts when switching projects — otherwise a field gid from the
+    // previous project could linger in state under a stale key.
+    setDrafts({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [projectGid]);
 
   // Seed drafts from the saved mappings once, when fields+mappings are both
   // in — not on every mappings refetch, or an in-progress edit would be

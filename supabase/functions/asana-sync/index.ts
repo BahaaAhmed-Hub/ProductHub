@@ -1,7 +1,8 @@
 // ProductHub — one-way import: pull tasks, comments, owners, and status
-// from the connected Asana project into the shared backlog. Manual trigger
-// (v1) — re-running is safe, tasks upsert on
-// (workspace_id, external_source, external_id), comments on
+// from one Asana project (of possibly several added to this workspace —
+// see integration_projects) into the shared backlog. Manual trigger, one
+// project per call (the caller passes projectGid) — re-running is safe,
+// tasks upsert on (workspace_id, external_source, external_id), comments on
 // (item_id, external_source, external_id).
 //
 // Field mapping: driven entirely by integration_field_mappings, covering
@@ -88,6 +89,10 @@ function displayValue(t: AsanaTask, sourceField: string): string | undefined {
   }
 }
 
+interface Body {
+  projectGid: string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -97,15 +102,31 @@ Deno.serve(async (req) => {
   const caller = await requireManager(supabase);
   if (!caller) return json({ error: 'Only a workspace Manager can sync integrations.' }, 403);
 
+  let body: Body;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: 'Invalid JSON body.' }, 400);
+  }
+  if (!body.projectGid) return json({ error: 'Missing "projectGid".' }, 400);
+
   const { data: connection, error } = await supabase
     .from('integration_connections')
-    .select('id, access_token, refresh_token, expires_at, external_project_gid')
+    .select('id, access_token, refresh_token, expires_at')
     .eq('workspace_id', caller.workspaceId)
     .eq('provider', 'asana')
     .maybeSingle();
   if (error) return json({ error: error.message }, 500);
   if (!connection) return json({ error: 'Asana is not connected for this workspace.' }, 404);
-  if (!connection.external_project_gid) return json({ error: 'Pick an Asana project to sync first.' }, 400);
+
+  const { data: project, error: projectError } = await supabase
+    .from('integration_projects')
+    .select('id, external_project_gid')
+    .eq('connection_id', connection.id)
+    .eq('external_project_gid', body.projectGid)
+    .maybeSingle();
+  if (projectError) return json({ error: projectError.message }, 500);
+  if (!project) return json({ error: 'That project is not added to this workspace.' }, 404);
 
   try {
     const accessToken = await ensureFreshToken(supabase, connection);
@@ -113,7 +134,7 @@ Deno.serve(async (req) => {
     const [tasks, mappingRows, profileRows] = await Promise.all([
       asanaFetchAllPages<AsanaTask>(
         accessToken,
-        `/projects/${connection.external_project_gid}/tasks` +
+        `/projects/${project.external_project_gid}/tasks` +
           `?opt_fields=name,notes,completed,assignee.name,assignee.email,memberships.section.name,` +
           `custom_fields.gid,custom_fields.enum_value.name,custom_fields.display_value,` +
           `due_on,start_on,tags.name,permalink_url&limit=100`,
@@ -269,9 +290,9 @@ Deno.serve(async (req) => {
     }
 
     await supabase
-      .from('integration_connections')
+      .from('integration_projects')
       .update({ last_synced_at: new Date().toISOString() })
-      .eq('id', connection.id);
+      .eq('id', project.id);
 
     return json({ imported, total: tasks.length, commentsImported });
   } catch (e) {

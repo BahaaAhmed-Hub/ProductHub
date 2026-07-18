@@ -6,16 +6,22 @@ import { invoke } from '@/lib/edgeFunctions';
 
 export interface AsanaConnection {
   connected: boolean;
-  externalWorkspaceName: string | null;
-  externalProjectGid: string | null;
-  externalProjectName: string | null;
-  lastSyncedAt: string | null;
 }
 
 export interface AsanaProjectGroup {
   gid: string;
   name: string;
   projects: { gid: string; name: string }[];
+}
+
+/** One Asana project a manager has added to sync from — a workspace can
+ * have several, unlike the old single-project design. */
+export interface AsanaAddedProject {
+  id: string;
+  externalWorkspaceName: string | null;
+  externalProjectGid: string;
+  externalProjectName: string;
+  lastSyncedAt: string | null;
 }
 
 /** A mappable Asana source — the project's sections (always present), every
@@ -51,13 +57,7 @@ export interface CustomFieldDef {
   name: string;
 }
 
-const NOT_CONNECTED: AsanaConnection = {
-  connected: false,
-  externalWorkspaceName: null,
-  externalProjectGid: null,
-  externalProjectName: null,
-  lastSyncedAt: null,
-};
+const NOT_CONNECTED: AsanaConnection = { connected: false };
 
 /** Exported so the UI can display the exact value being sent — Asana's
  * "redirect_uri does not match" error never echoes back what was sent, so
@@ -83,22 +83,43 @@ export function useAsanaConnection(): { connection: AsanaConnection; isLoading: 
     queryFn: async (): Promise<AsanaConnection> => {
       const { data, error } = await supabase
         .from('integration_connections')
-        .select('external_workspace_name, external_project_gid, external_project_name, last_synced_at')
+        .select('id')
         .eq('provider', 'asana')
         .maybeSingle();
       if (error) throw error;
-      if (!data) return NOT_CONNECTED;
-      return {
-        connected: true,
-        externalWorkspaceName: data.external_workspace_name,
-        externalProjectGid: data.external_project_gid,
-        externalProjectName: data.external_project_name,
-        lastSyncedAt: data.last_synced_at,
-      };
+      return { connected: Boolean(data) };
     },
   });
   if (!isSupabaseConfigured) return { connection: NOT_CONNECTED, isLoading: false };
   return { connection: q.data ?? NOT_CONNECTED, isLoading: q.isLoading };
+}
+
+/** Every Asana project this workspace has added to sync from — replaces
+ * the old single "the connected project" slot. */
+export function useAsanaAddedProjects(): { projects: AsanaAddedProject[]; isLoading: boolean } {
+  const q = useQuery({
+    queryKey: ['integration', 'asana', 'added-projects'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<AsanaAddedProject[]> => {
+      const { data, error } = await supabase
+        .from('integration_projects')
+        .select('id, external_workspace_name, external_project_gid, external_project_name, last_synced_at')
+        .order('added_at');
+      if (error) throw error;
+      return (
+        data as {
+          id: string; external_workspace_name: string | null;
+          external_project_gid: string; external_project_name: string; last_synced_at: string | null;
+        }[]
+      ).map((r) => ({
+        id: r.id, externalWorkspaceName: r.external_workspace_name,
+        externalProjectGid: r.external_project_gid, externalProjectName: r.external_project_name,
+        lastSyncedAt: r.last_synced_at,
+      }));
+    },
+  });
+  if (!isSupabaseConfigured) return { projects: [], isLoading: false };
+  return { projects: q.data ?? [], isLoading: q.isLoading };
 }
 
 /** Connect Asana in a popup, the way every other "Connect X" integration
@@ -186,13 +207,15 @@ export function useAsanaProjects() {
   return { groups: q.data?.workspaces ?? [], isLoading: q.isFetching, load: q.refetch };
 }
 
-/** The connected project's mappable fields — sections + custom fields.
- * Fetched on demand (opening the mapping panel), not on every render. */
-export function useAsanaFields() {
+/** One project's mappable fields — sections + custom fields. Fetched on
+ * demand (opening the mapping panel / switching which added project to
+ * browse), keyed by projectGid so switching projects refetches instead of
+ * showing stale fields from whichever was loaded first. */
+export function useAsanaFields(projectGid: string | null) {
   const q = useQuery({
-    queryKey: ['integration', 'asana', 'fields'],
+    queryKey: ['integration', 'asana', 'fields', projectGid],
     enabled: false,
-    queryFn: () => invoke<{ fields: AsanaField[] }>('asana-fields', {}),
+    queryFn: () => invoke<{ fields: AsanaField[] }>('asana-fields', { projectGid }),
   });
   return { fields: q.data?.fields ?? [], isLoading: q.isFetching, load: q.refetch };
 }
@@ -298,24 +321,43 @@ export function useFieldMappingActions() {
 
 export function useAsanaActions() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['integration', 'asana'] });
 
   return {
-    async selectProject(group: AsanaProjectGroup, project: { gid: string; name: string }) {
-      const { error } = await supabase
+    /** Adds a project to this workspace's sync list — a no-op (not an
+     * error) if it's already added, since the picker still shows already-
+     * added projects (just marked) rather than filtering them out. */
+    async addProject(group: AsanaProjectGroup, project: { gid: string; name: string }) {
+      if (!user) throw new Error('Not signed in.');
+      const { data: connection, error: connError } = await supabase
         .from('integration_connections')
-        .update({
+        .select('id')
+        .eq('provider', 'asana')
+        .maybeSingle();
+      if (connError) throw connError;
+      if (!connection) throw new Error('Asana is not connected for this workspace.');
+      const { error } = await supabase.from('integration_projects').upsert(
+        {
+          workspace_id: user.workspaceId,
+          connection_id: connection.id,
           external_workspace_gid: group.gid,
           external_workspace_name: group.name,
           external_project_gid: project.gid,
           external_project_name: project.name,
-        })
-        .eq('provider', 'asana');
+        },
+        { onConflict: 'connection_id,external_project_gid' },
+      );
       if (error) throw error;
       await invalidate();
     },
-    async sync(): Promise<{ imported: number; total: number; commentsImported: number }> {
-      const result = await invoke<{ imported: number; total: number; commentsImported: number }>('asana-sync', {});
+    async removeProject(id: string) {
+      const { error } = await supabase.from('integration_projects').delete().eq('id', id);
+      if (error) throw error;
+      await invalidate();
+    },
+    async sync(projectGid: string): Promise<{ imported: number; total: number; commentsImported: number }> {
+      const result = await invoke<{ imported: number; total: number; commentsImported: number }>('asana-sync', { projectGid });
       await invalidate();
       await qc.invalidateQueries({ queryKey: ['board'] });
       return result;

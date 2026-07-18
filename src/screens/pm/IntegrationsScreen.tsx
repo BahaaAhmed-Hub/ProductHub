@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Tag';
 import { Icon } from '@/components/ui/Icon';
 import {
-  connectAsana, useAsanaConnection, useAsanaProjects, useAsanaActions, REDIRECT_URI,
+  connectAsana, useAsanaConnection, useAsanaProjects, useAsanaAddedProjects, useAsanaActions, REDIRECT_URI,
   type AsanaProjectGroup,
 } from '@/features/integrations/asana';
 import { AsanaFieldMapping } from '@/features/integrations/AsanaFieldMapping';
@@ -37,13 +37,17 @@ function timeAgo(iso: string | null): string {
 
 function AsanaCard() {
   const { connection, isLoading } = useAsanaConnection();
+  const { projects: added, isLoading: addedLoading } = useAsanaAddedProjects();
   const { groups, isLoading: projectsLoading, load } = useAsanaProjects();
   const actions = useAsanaActions();
   const [picking, setPicking] = useState(false);
-  const [showSyncModal, setShowSyncModal] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [showMapping, setShowMapping] = useState(false);
+  const [mappingProjectGid, setMappingProjectGid] = useState<string | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const addedGids = new Set(added.map((p) => p.externalProjectGid));
 
   async function onConnect() {
     setError(null);
@@ -56,36 +60,46 @@ function AsanaCard() {
 
   async function onOpenPicker() {
     setError(null);
-    setPicking(true);
+    setPicking((p) => !p);
     await load();
   }
 
-  async function onPick(group: AsanaProjectGroup, project: { gid: string; name: string }) {
+  async function onAdd(group: AsanaProjectGroup, project: { gid: string; name: string }) {
+    if (addedGids.has(project.gid)) return;
+    setError(null);
     try {
-      await actions.selectProject(group, project);
-      setPicking(false);
+      await actions.addProject(group, project);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save that project.');
+      setError(err instanceof Error ? err.message : 'Could not add that project.');
     }
   }
 
-  function onOpenSync() {
+  async function onRemove(id: string) {
     setError(null);
-    setSyncNote(null);
-    setShowSyncModal(true);
+    try {
+      await actions.removeProject(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove that project.');
+    }
   }
 
-  async function onSync() {
-    setSyncing(true);
+  function onOpenMapping() {
+    setError(null);
+    setMappingProjectGid(added[0]?.externalProjectGid ?? null);
+    setShowMapping(true);
+  }
+
+  async function onSync(projectId: string, projectGid: string) {
+    setSyncingId(projectId);
     setError(null);
     setSyncNote(null);
     try {
-      const { imported, total, commentsImported } = await actions.sync();
+      const { imported, total, commentsImported } = await actions.sync(projectGid);
       setSyncNote(`Synced ${imported} of ${total} tasks, ${commentsImported} comments.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed.');
     } finally {
-      setSyncing(false);
+      setSyncingId(null);
     }
   }
 
@@ -109,11 +123,12 @@ function AsanaCard() {
       <div>
         <div className="text-[15px] font-semibold">Asana</div>
         <div className="text-[12px] text-body mt-1">
-          Import tasks from a chosen Asana project into the backlog. One-way, manual sync.
+          Import tasks from any number of Asana projects into the backlog. One-way, manual sync per project.
         </div>
       </div>
 
       {error && <div className="text-[11px] text-danger">{error}</div>}
+      {syncNote && <div className="text-[11px] text-success">{syncNote}</div>}
 
       {isLoading ? (
         <div className="text-[12px] text-label">Loading…</div>
@@ -127,70 +142,104 @@ function AsanaCard() {
             </code>
           </div>
         </div>
-      ) : !connection.externalProjectGid ? (
+      ) : (
         <div className="flex flex-col gap-2">
-          <Button variant="secondary" icon="tune" onClick={onOpenPicker} disabled={picking && projectsLoading}>
-            {picking && projectsLoading ? 'Loading projects…' : 'Choose a project'}
-          </Button>
+          {addedLoading ? (
+            <div className="text-[12px] text-label">Loading projects…</div>
+          ) : added.length === 0 ? (
+            <p className="text-[13px] text-body">No projects added yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {added.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 border-[0.5px] border-hairline rounded-control px-2.5 py-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium truncate">{p.externalProjectName}</div>
+                    <div className="text-[11px] text-label flex items-center gap-1">
+                      <Icon name="schedule" size={11} /> Last synced {timeAgo(p.lastSyncedAt)}
+                    </div>
+                  </div>
+                  <button
+                    className="text-[12px] text-accent disabled:opacity-50 flex-shrink-0"
+                    disabled={syncingId === p.id}
+                    onClick={() => onSync(p.id, p.externalProjectGid)}
+                  >
+                    {syncingId === p.id ? 'Syncing…' : 'Sync'}
+                  </button>
+                  <button
+                    className="text-label hover:text-danger flex-shrink-0"
+                    onClick={() => onRemove(p.id)}
+                    aria-label="Remove project"
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" icon="add" className="flex-1" onClick={onOpenPicker} disabled={picking && projectsLoading}>
+              {picking && projectsLoading ? 'Loading…' : 'Add project'}
+            </Button>
+            <Button variant="secondary" icon="tune" onClick={onOpenMapping} disabled={added.length === 0}>
+              Field mapping
+            </Button>
+          </div>
+
           {picking && !projectsLoading && (
             <div className="border-[0.5px] border-hairline rounded-control max-h-48 overflow-y-auto scroll-thin">
               {groups.length === 0 && <div className="p-3 text-[12px] text-label">No projects found.</div>}
               {groups.map((g) => (
                 <div key={g.gid}>
                   <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-label bg-[#F7F7F5]">{g.name}</div>
-                  {g.projects.map((p) => (
-                    <button
-                      key={p.gid}
-                      onClick={() => onPick(g, p)}
-                      className="w-full text-left px-3 py-2 text-[13px] hover:bg-[#F4F3F0] border-t-[0.5px] border-hairline"
-                    >
-                      {p.name}
-                    </button>
-                  ))}
+                  {g.projects.map((p) => {
+                    const isAdded = addedGids.has(p.gid);
+                    return (
+                      <button
+                        key={p.gid}
+                        disabled={isAdded}
+                        onClick={() => onAdd(g, p)}
+                        className={`w-full flex items-center justify-between text-left px-3 py-2 text-[13px] border-t-[0.5px] border-hairline ${isAdded ? 'text-label cursor-default' : 'hover:bg-[#F4F3F0]'}`}
+                      >
+                        {p.name}
+                        {isAdded && <Icon name="check" size={14} className="text-label" />}
+                      </button>
+                    );
+                  })}
                 </div>
               ))}
             </div>
           )}
+
           <Button variant="ghost" onClick={onDisconnect}>Disconnect</Button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <div className="text-[12px] text-body">
-            Syncing from <b>{connection.externalProjectName}</b>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" icon="sprint" className="flex-1" onClick={onOpenSync}>
-              Sync now
-            </Button>
-            <Button variant="ghost" onClick={onDisconnect}>Disconnect</Button>
-          </div>
-          <div className="text-[11px] text-label flex items-center gap-1">
-            <Icon name="schedule" size={12} /> Last synced {timeAgo(connection.lastSyncedAt)}
-          </div>
         </div>
       )}
 
-      {showSyncModal && (
+      {showMapping && mappingProjectGid && (
         <div
           className="fixed inset-0 z-50 bg-navy/40 backdrop-blur-sm flex items-center justify-center p-6"
-          onClick={() => setShowSyncModal(false)}
+          onClick={() => setShowMapping(false)}
         >
           <div
             className="w-[480px] max-h-[80vh] flex flex-col bg-surface rounded-frame shadow-pop p-5"
             onClick={(e) => e.stopPropagation()}
           >
+            {added.length > 1 && (
+              <label className="flex items-center gap-2 mb-3 text-[12px] flex-shrink-0">
+                <span className="text-label flex-shrink-0">Project</span>
+                <select
+                  value={mappingProjectGid}
+                  onChange={(e) => setMappingProjectGid(e.target.value)}
+                  className="flex-1 h-8 px-2 rounded-control border-[0.5px] border-hairline bg-surface text-[12px] outline-none"
+                >
+                  {added.map((p) => (
+                    <option key={p.externalProjectGid} value={p.externalProjectGid}>{p.externalProjectName}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex-1 overflow-y-auto scroll-thin">
-              <AsanaFieldMapping onClose={() => setShowSyncModal(false)} />
-            </div>
-            <div className="flex-shrink-0 pt-3 mt-1 border-t-[0.5px] border-hairline">
-              {error && <div className="text-[11px] text-danger mb-2">{error}</div>}
-              {syncNote && <div className="text-[11px] text-success mb-2">{syncNote}</div>}
-              <div className="flex items-center gap-2">
-                <Button className="flex-1" disabled={syncing} onClick={onSync}>
-                  {syncing ? 'Syncing…' : 'Sync now'}
-                </Button>
-                <Button variant="ghost" onClick={() => setShowSyncModal(false)}>Close</Button>
-              </div>
+              <AsanaFieldMapping projectGid={mappingProjectGid} onClose={() => setShowMapping(false)} />
             </div>
           </div>
         </div>
