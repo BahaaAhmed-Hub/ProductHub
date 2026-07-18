@@ -36,6 +36,46 @@ export async function requireManager(
   return { id: data.id, workspaceId: data.workspace_id, role: data.role };
 }
 
+export interface CallerPlatformAdmin {
+  id: string;
+  name: string;
+  role: string;
+}
+
+/** Platform Admin console callers (ProductHub-Admin, a separate app/repo
+ * sharing this Supabase project) are gated by platform_admins, not
+ * profiles/role — a completely different trust boundary from every other
+ * Edge Function here. */
+async function resolvePlatformAdmin(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+): Promise<CallerPlatformAdmin | null> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) return null;
+  const { data, error } = await supabase
+    .from('platform_admins')
+    .select('id, name, role, status')
+    .eq('auth_uid', auth.user.id)
+    .maybeSingle();
+  if (error || !data || data.status !== 'active') return null;
+  return { id: data.id, name: data.name, role: data.role };
+}
+
+export async function requirePlatformAdmin(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+): Promise<CallerPlatformAdmin | null> {
+  return resolvePlatformAdmin(supabase);
+}
+
+export async function requirePlatformOwner(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+): Promise<CallerPlatformAdmin | null> {
+  const admin = await resolvePlatformAdmin(supabase);
+  return admin?.role === 'Platform Owner' ? admin : null;
+}
+
 export interface CallerOrg {
   id: string;
   name: string;
