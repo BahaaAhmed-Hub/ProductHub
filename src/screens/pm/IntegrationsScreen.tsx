@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -42,14 +42,6 @@ function AsanaCard() {
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const stashed = sessionStorage.getItem('ph.asanaOAuthError');
-    if (stashed) {
-      setError(stashed);
-      sessionStorage.removeItem('ph.asanaOAuthError');
-    }
-  }, []);
 
   async function onConnect() {
     setError(null);

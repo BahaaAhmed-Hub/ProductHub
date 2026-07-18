@@ -29,10 +29,17 @@ const NOT_CONNECTED: AsanaConnection = {
  * "redirect_uri does not match" error never echoes back what was sent, so
  * without this the only way to debug a mismatch is guessing. */
 export const REDIRECT_URI = () => window.location.href.split('#')[0];
+// localStorage, not sessionStorage — it's origin-scoped rather than
+// browsing-context-scoped, so it survives Asana's own pages severing
+// window.opener via Cross-Origin-Opener-Policy (postMessage/window.opener
+// are unreliable the moment a third party's redirect is in the loop; a
+// plain origin-wide store + polling isn't).
 const EXPECTED_STATE_KEY = 'ph.asanaOAuthExpectedState';
+const RESULT_KEY = 'ph.asanaOAuthResult';
+// sessionStorage — set by the inline capture script in index.html, read
+// once by whichever window lands on the redirect URI (the popup, normally).
 const RETURNED_CODE_KEY = 'ph.asanaOAuthCode';
 const RETURNED_STATE_KEY = 'ph.asanaOAuthState';
-const POPUP_MESSAGE_SOURCE = 'ph-asana-oauth';
 
 async function invoke<T>(fn: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
@@ -105,50 +112,47 @@ export async function connectAsana(): Promise<void> {
     popup.close();
     throw err;
   }
-  sessionStorage.setItem(EXPECTED_STATE_KEY, authorize.state);
+  localStorage.removeItem(RESULT_KEY);
+  localStorage.setItem(EXPECTED_STATE_KEY, authorize.state);
   popup.location.href = authorize.url;
 
   return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (fn: () => void) => {
-      settled = true;
-      window.removeEventListener('message', onMessage);
-      clearInterval(watcher);
-      fn();
-    };
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin || event.data?.source !== POPUP_MESSAGE_SOURCE) return;
-      const { code, state } = event.data as { code?: string; state?: string };
-      if (!code || !state) return finish(() => reject(new Error('Asana did not return an authorization code.')));
-      if (state !== sessionStorage.getItem(EXPECTED_STATE_KEY)) {
-        return finish(() => reject(new Error('Asana sign-in could not be verified (state mismatch) — please try again.')));
-      }
-      sessionStorage.removeItem(EXPECTED_STATE_KEY);
-      finish(() => {
+    const watcher = setInterval(() => {
+      const raw = localStorage.getItem(RESULT_KEY);
+      if (raw) {
+        clearInterval(watcher);
+        localStorage.removeItem(RESULT_KEY);
+        const expected = localStorage.getItem(EXPECTED_STATE_KEY);
+        localStorage.removeItem(EXPECTED_STATE_KEY);
+        const { code, state } = JSON.parse(raw) as { code: string; state: string };
+        if (state !== expected) {
+          reject(new Error('Asana sign-in could not be verified (state mismatch) — please try again.'));
+          return;
+        }
         invoke('asana-oauth', { action: 'callback', code, redirectUri: REDIRECT_URI() })
           .then(() => queryClient.invalidateQueries({ queryKey: ['integration', 'asana'] }))
           .then(resolve)
           .catch(reject);
-      });
-    };
-    window.addEventListener('message', onMessage);
-    // The popup can also be closed by hand before finishing — that's the
-    // only way to detect a user-abandoned flow (there's no cancel event).
-    const watcher = setInterval(() => {
-      if (popup.closed && !settled) finish(() => reject(new Error('The Asana authorization window was closed before finishing.')));
+        return;
+      }
+      // The popup can also be closed by hand before finishing — that's the
+      // only way to detect a user-abandoned flow (there's no cancel event).
+      if (popup.closed) {
+        clearInterval(watcher);
+        reject(new Error('The Asana authorization window was closed before finishing.'));
+      }
     }, 400);
   });
 }
 
 /** Runs inside the popup once Asana redirects it back to our origin (the
  * inline script in index.html has already captured ?code&state into this
- * window's own sessionStorage). Forwards them to the opener, which does the
- * actual verification + exchange with its own untouched session state —
- * the popup just navigated cross-origin and back, so its own sessionStorage
- * can't be trusted as the source of truth for the pre-redirect "expected
- * state" value. Returns true if a pending callback was found (either
- * forwarded to an opener, or — no opener, e.g. popups were blocked and this
- * somehow still ran as a plain redirect — resolved locally as a fallback). */
+ * window's own sessionStorage). Drops the raw code/state into localStorage
+ * for the opener's connectAsana() to pick up, then closes itself — the
+ * verification + exchange happens over there, not here, since a plain
+ * origin-scoped store survives the cross-origin round trip in a way
+ * window.opener/postMessage don't reliably. Returns true if a pending
+ * callback was found. */
 export async function consumePendingAsanaOAuth(): Promise<boolean> {
   const code = sessionStorage.getItem(RETURNED_CODE_KEY);
   const state = sessionStorage.getItem(RETURNED_STATE_KEY);
@@ -156,19 +160,8 @@ export async function consumePendingAsanaOAuth(): Promise<boolean> {
   sessionStorage.removeItem(RETURNED_STATE_KEY);
   if (!code || !state) return false;
 
-  if (window.opener) {
-    window.opener.postMessage({ source: POPUP_MESSAGE_SOURCE, code, state }, window.location.origin);
-    window.close();
-    return true;
-  }
-
-  // Fallback: no opener (popup was blocked and connectAsana's own error
-  // never fired, or the URL was reopened directly) — verify and exchange
-  // locally instead of silently doing nothing.
-  const expected = sessionStorage.getItem(EXPECTED_STATE_KEY);
-  sessionStorage.removeItem(EXPECTED_STATE_KEY);
-  if (state !== expected) throw new Error('Asana sign-in could not be verified (state mismatch) — please try again.');
-  await invoke('asana-oauth', { action: 'callback', code, redirectUri: REDIRECT_URI() });
+  localStorage.setItem(RESULT_KEY, JSON.stringify({ code, state }));
+  window.close();
   return true;
 }
 
