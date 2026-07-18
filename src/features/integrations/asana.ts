@@ -18,17 +18,22 @@ export interface AsanaProjectGroup {
   projects: { gid: string; name: string }[];
 }
 
-/** A mappable Asana source — the project's sections (always present, used
- * for status) or one of its enum/multi_enum custom fields. Discovered live
- * from the connected project, never hardcoded, so a field added in Asana
- * later just shows up here with no ProductHub code change. */
+/** A mappable Asana source — the project's sections (always present), every
+ * custom field the project has regardless of type (per Asana's task
+ * resource: text/number/date/people/enum/multi_enum), or one of a few
+ * built-in task fields. Discovered live from the connected project, never
+ * hardcoded, so a field added in Asana later just shows up here with no
+ * ProductHub code change. 'enum' kind fields have known options and can
+ * translate into board_status/priority/type; every other kind only makes
+ * sense mapped to 'description'. */
 export interface AsanaField {
   sourceField: string;
   label: string;
+  kind: 'enum' | 'other';
   options: string[];
 }
 
-export type MappingTarget = 'board_status' | 'priority' | 'type' | 'ignore';
+export type MappingTarget = 'board_status' | 'priority' | 'type' | 'description' | 'ignore';
 
 export interface FieldMapping {
   sourceField: string;

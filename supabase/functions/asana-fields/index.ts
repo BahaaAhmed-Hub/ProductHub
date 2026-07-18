@@ -1,10 +1,19 @@
-// ProductHub — discover the connected Asana project's mappable fields:
-// its board sections (always available, used for status) and whatever
-// custom fields the project actually has (never hardcoded — a project
-// picked up a new custom field in Asana shows up here with no code change).
+// ProductHub — discover every mappable field on the connected Asana
+// project: its board sections, every custom field regardless of type
+// (text/number/date/people/enum/multi_enum — per Asana's task resource:
+// https://developers.asana.com/reference/tasks), and a handful of built-in
+// task fields that don't otherwise have a home in ProductHub's schema.
+// Never hardcoded to a fixed field list — a project's actual custom fields
+// are fetched live, so a new one shows up here with no code change.
 import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient, requireManager } from '../_shared/authedClient.ts';
 import { asanaFetch, ensureFreshToken } from '../_shared/asana.ts';
+
+// 'enum' is the only kind whose values are known in advance (enum_options)
+// and can be translated 1:1 into a ProductHub enum column. Every other kind
+// only has "description" (append the value) or "ignore" as a sensible
+// mapping target — see FieldMapping.targetField in the frontend.
+export type FieldKind = 'enum' | 'other';
 
 interface AsanaSection {
   gid: string;
@@ -18,10 +27,29 @@ interface AsanaCustomFieldSetting {
   custom_field: {
     gid: string;
     name: string;
-    resource_subtype: string; // 'enum' | 'multi_enum' | 'text' | 'number' | ...
+    resource_subtype: string; // 'enum' | 'multi_enum' | 'text' | 'number' | 'date' | 'people' | 'formula' | ...
     enum_options?: AsanaEnumOption[];
   };
 }
+
+interface Field {
+  sourceField: string;
+  label: string;
+  kind: FieldKind;
+  options: string[];
+}
+
+// Built-in task fields with no dedicated ProductHub column — mappable only
+// to "description". Kept short and high-value rather than exhaustively
+// covering every field on the task resource (dependencies, followers,
+// hearts/likes, subtasks): those don't translate into anything ProductHub
+// tracks even as free text, so they're deliberately left out.
+const BUILTIN_FIELDS: Field[] = [
+  { sourceField: '__due_on__', label: 'Due date', kind: 'other', options: [] },
+  { sourceField: '__start_on__', label: 'Start date', kind: 'other', options: [] },
+  { sourceField: '__tags__', label: 'Tags', kind: 'other', options: [] },
+  { sourceField: '__permalink__', label: 'Asana link', kind: 'other', options: [] },
+];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -52,20 +80,25 @@ Deno.serve(async (req) => {
       ) as Promise<AsanaCustomFieldSetting[]>,
     ]);
 
-    const sectionField = {
+    const sectionField: Field = {
       sourceField: '__section__',
       label: 'Section (board column)',
+      kind: 'enum',
       options: sections.map((s) => s.name),
     };
-    const customFields = fieldSettings
-      .filter((f) => ['enum', 'multi_enum'].includes(f.custom_field.resource_subtype))
-      .map((f) => ({
-        sourceField: f.custom_field.gid,
-        label: f.custom_field.name,
-        options: (f.custom_field.enum_options ?? []).map((o) => o.name),
-      }));
 
-    return json({ fields: [sectionField, ...customFields] });
+    // Every custom field the project has, of any type — not filtered down
+    // to enum/multi_enum. A text/number/date/people/multi_enum field just
+    // comes through with kind 'other' and no options; the frontend only
+    // offers it "description" or "ignore" as a target.
+    const customFields: Field[] = fieldSettings.map((f) => ({
+      sourceField: f.custom_field.gid,
+      label: f.custom_field.name,
+      kind: f.custom_field.resource_subtype === 'enum' ? 'enum' : 'other',
+      options: f.custom_field.resource_subtype === 'enum' ? (f.custom_field.enum_options ?? []).map((o) => o.name) : [],
+    }));
+
+    return json({ fields: [sectionField, ...customFields, ...BUILTIN_FIELDS] });
   } catch (e) {
     return json({ error: String(e instanceof Error ? e.message : e) }, 502);
   }

@@ -40,7 +40,7 @@ function AsanaCard() {
   const { groups, isLoading: projectsLoading, load } = useAsanaProjects();
   const actions = useAsanaActions();
   const [picking, setPicking] = useState(false);
-  const [mapping, setMapping] = useState(false);
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +67,12 @@ function AsanaCard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save that project.');
     }
+  }
+
+  function onOpenSync() {
+    setError(null);
+    setSyncNote(null);
+    setShowSyncModal(true);
   }
 
   async function onSync() {
@@ -153,19 +159,40 @@ function AsanaCard() {
             Syncing from <b>{connection.externalProjectName}</b>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" icon="sprint" className="flex-1" disabled={syncing} onClick={onSync}>
-              {syncing ? 'Syncing…' : 'Sync now'}
-            </Button>
-            <Button variant="secondary" icon="tune" onClick={() => setMapping((m) => !m)}>
-              {mapping ? 'Hide field mapping' : 'Field mapping'}
+            <Button variant="secondary" icon="sprint" className="flex-1" onClick={onOpenSync}>
+              Sync now
             </Button>
             <Button variant="ghost" onClick={onDisconnect}>Disconnect</Button>
           </div>
-          {syncNote && <div className="text-[11px] text-success">{syncNote}</div>}
           <div className="text-[11px] text-label flex items-center gap-1">
             <Icon name="schedule" size={12} /> Last synced {timeAgo(connection.lastSyncedAt)}
           </div>
-          {mapping && <AsanaFieldMapping onClose={() => setMapping(false)} />}
+        </div>
+      )}
+
+      {showSyncModal && (
+        <div
+          className="fixed inset-0 z-50 bg-navy/40 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setShowSyncModal(false)}
+        >
+          <div
+            className="w-[480px] max-h-[80vh] flex flex-col bg-surface rounded-frame shadow-pop p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-1 overflow-y-auto scroll-thin">
+              <AsanaFieldMapping onClose={() => setShowSyncModal(false)} />
+            </div>
+            <div className="flex-shrink-0 pt-3 mt-1 border-t-[0.5px] border-hairline">
+              {error && <div className="text-[11px] text-danger mb-2">{error}</div>}
+              {syncNote && <div className="text-[11px] text-success mb-2">{syncNote}</div>}
+              <div className="flex items-center gap-2">
+                <Button className="flex-1" disabled={syncing} onClick={onSync}>
+                  {syncing ? 'Syncing…' : 'Sync now'}
+                </Button>
+                <Button variant="ghost" onClick={() => setShowSyncModal(false)}>Close</Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </Card>
