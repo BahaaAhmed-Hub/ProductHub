@@ -28,17 +28,20 @@ interface ItemRow {
   created_at: string | null;
   assignee: { name: string } | null;
   external_assignee_name: string | null;
+  custom_fields: Record<string, string> | null;
 }
 
 const ITEM_SELECT =
-  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, external_assignee_name, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, external_assignee_name, custom_fields, assignee:profiles!backlog_items_assignee_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
-  const { data, error } = await supabase
-    .from('backlog_items')
-    .select(ITEM_SELECT)
-    .order('created_at', { ascending: false });
+  const [{ data, error }, { data: defs, error: defsError }] = await Promise.all([
+    supabase.from('backlog_items').select(ITEM_SELECT).order('created_at', { ascending: false }),
+    supabase.from('custom_field_defs').select('id, name'),
+  ]);
   if (error) throw error;
+  if (defsError) throw defsError;
+  const nameById = new Map((defs as { id: string; name: string }[]).map((d) => [d.id, d.name]));
   return (data as unknown as ItemRow[]).map((r) => ({
     id: r.id,
     ref: r.ref,
@@ -60,6 +63,13 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     ...(r.release_id ? { releaseId: r.release_id } : {}),
     ...(r.created_at ? { createdAt: r.created_at } : {}),
     ...(r.plan_bucket ? { planBucket: r.plan_bucket } : {}),
+    ...(r.custom_fields && Object.keys(r.custom_fields).length > 0
+      ? {
+          customFields: Object.entries(r.custom_fields)
+            .map(([defId, value]) => ({ name: nameById.get(defId), value }))
+            .filter((f): f is { name: string; value: string } => Boolean(f.name)),
+        }
+      : {}),
   }));
 }
 

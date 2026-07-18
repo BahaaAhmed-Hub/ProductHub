@@ -33,13 +33,19 @@ export interface AsanaField {
   options: string[];
 }
 
-export type MappingTarget = 'board_status' | 'priority' | 'type' | 'description' | 'ignore';
+export type MappingTarget = 'board_status' | 'priority' | 'type' | 'description' | 'custom' | 'ignore';
 
 export interface FieldMapping {
   sourceField: string;
   sourceLabel: string;
   targetField: MappingTarget;
   valueMap: Record<string, string>;
+  customFieldDefId: string | null;
+}
+
+export interface CustomFieldDef {
+  id: string;
+  name: string;
 }
 
 const NOT_CONNECTED: AsanaConnection = {
@@ -217,25 +223,74 @@ export function useFieldMappings(): { mappings: FieldMapping[]; isLoading: boole
     queryFn: async (): Promise<FieldMapping[]> => {
       const { data, error } = await supabase
         .from('integration_field_mappings')
-        .select('source_field, source_label, target_field, value_map')
+        .select('source_field, source_label, target_field, value_map, custom_field_def_id')
         .eq('provider', 'asana');
       if (error) throw error;
-      return (data as { source_field: string; source_label: string; target_field: MappingTarget; value_map: Record<string, string> }[]).map(
-        (r) => ({ sourceField: r.source_field, sourceLabel: r.source_label, targetField: r.target_field, valueMap: r.value_map }),
-      );
+      return (
+        data as {
+          source_field: string; source_label: string; target_field: MappingTarget;
+          value_map: Record<string, string>; custom_field_def_id: string | null;
+        }[]
+      ).map((r) => ({
+        sourceField: r.source_field, sourceLabel: r.source_label, targetField: r.target_field,
+        valueMap: r.value_map, customFieldDefId: r.custom_field_def_id,
+      }));
     },
   });
   if (!isSupabaseConfigured) return { mappings: [], isLoading: false };
   return { mappings: q.data ?? [], isLoading: q.isLoading };
 }
 
+/** Custom field definitions created on the fly from the mapping panel —
+ * workspace-scoped, one per distinct name. Surfaced in the item detail
+ * panel's "Custom fields" section, which stays hidden when this is empty. */
+export function useCustomFieldDefs(): { defs: CustomFieldDef[]; isLoading: boolean } {
+  const q = useQuery({
+    queryKey: ['integration', 'asana', 'custom-field-defs'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<CustomFieldDef[]> => {
+      const { data, error } = await supabase.from('custom_field_defs').select('id, name').order('name');
+      if (error) throw error;
+      return data as CustomFieldDef[];
+    },
+  });
+  if (!isSupabaseConfigured) return { defs: [], isLoading: false };
+  return { defs: q.data ?? [], isLoading: q.isLoading };
+}
+
 export function useFieldMappingActions() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['integration', 'asana', 'mappings'] });
+  const invalidate = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['integration', 'asana', 'mappings'] }),
+      qc.invalidateQueries({ queryKey: ['integration', 'asana', 'custom-field-defs'] }),
+    ]);
 
   return {
-    async save(field: AsanaField, targetField: MappingTarget, valueMap: Record<string, string>) {
+    /** Finds an existing custom field definition by name (reused if the
+     * Manager maps a second Asana field to the same name) or creates one —
+     * "create a new field with the same name as the imported field" needs
+     * no free-text naming step, just this lookup-or-insert. */
+    async ensureCustomFieldDef(name: string): Promise<string> {
+      if (!user) throw new Error('Not signed in.');
+      const { data: existing, error: findError } = await supabase
+        .from('custom_field_defs')
+        .select('id')
+        .eq('workspace_id', user.workspaceId)
+        .eq('name', name)
+        .maybeSingle();
+      if (findError) throw findError;
+      if (existing) return existing.id;
+      const { data: created, error: insertError } = await supabase
+        .from('custom_field_defs')
+        .insert({ workspace_id: user.workspaceId, name, source: 'asana' })
+        .select('id')
+        .single();
+      if (insertError) throw insertError;
+      return created.id;
+    },
+    async save(field: AsanaField, targetField: MappingTarget, valueMap: Record<string, string>, customFieldDefId: string | null = null) {
       if (!user) throw new Error('Not signed in.');
       const { error } = await supabase.from('integration_field_mappings').upsert(
         {
@@ -245,6 +300,7 @@ export function useFieldMappingActions() {
           source_label: field.label,
           target_field: targetField,
           value_map: valueMap,
+          custom_field_def_id: customFieldDefId,
         },
         { onConflict: 'workspace_id,provider,source_field' },
       );

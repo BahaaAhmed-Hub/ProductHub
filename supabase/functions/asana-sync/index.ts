@@ -48,8 +48,9 @@ interface AsanaStory {
 interface FieldMapping {
   source_field: string;
   source_label: string;
-  target_field: 'board_status' | 'priority' | 'type' | 'description' | 'ignore';
+  target_field: 'board_status' | 'priority' | 'type' | 'description' | 'custom' | 'ignore';
   value_map: Record<string, string>;
+  custom_field_def_id: string | null;
 }
 
 function refFor(gid: string): string {
@@ -115,7 +116,7 @@ Deno.serve(async (req) => {
       ),
       supabase
         .from('integration_field_mappings')
-        .select('source_field, source_label, target_field, value_map')
+        .select('source_field, source_label, target_field, value_map, custom_field_def_id')
         .eq('workspace_id', caller.workspaceId)
         .eq('provider', 'asana')
         .then((r) => (r.data ?? []) as FieldMapping[]),
@@ -128,6 +129,7 @@ Deno.serve(async (req) => {
 
     const enumMappings = mappingRows.filter((m) => ['board_status', 'priority', 'type'].includes(m.target_field));
     const descriptionMappings = mappingRows.filter((m) => m.target_field === 'description');
+    const customMappings = mappingRows.filter((m) => m.target_field === 'custom' && m.custom_field_def_id);
     const profileByEmail = new Map(profileRows.map((p) => [p.email.toLowerCase(), p.id]));
 
     const rows = tasks.map((t) => {
@@ -155,6 +157,15 @@ Deno.serve(async (req) => {
         .filter((x): x is string => x !== null);
       const description = [t.notes || '', ...extras].filter(Boolean).join('\n\n');
 
+      // Fields the Manager chose to create as real custom fields (rather
+      // than just appended to the description) — keyed by definition id so
+      // the frontend can resolve names without denormalizing them here.
+      const custom_fields: Record<string, string> = {};
+      for (const m of customMappings) {
+        const val = displayValue(t, m.source_field);
+        if (val) custom_fields[m.custom_field_def_id as string] = val;
+      }
+
       const assigneeEmail = t.assignee?.email?.toLowerCase();
       const assignee_id = assigneeEmail ? (profileByEmail.get(assigneeEmail) ?? null) : null;
       const external_assignee_name = !assignee_id && t.assignee ? t.assignee.name : null;
@@ -169,6 +180,7 @@ Deno.serve(async (req) => {
         priority: priority ?? 'medium',
         assignee_id,
         external_assignee_name,
+        custom_fields,
         external_source: 'asana',
         external_id: t.gid,
       };

@@ -85,6 +85,17 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
           <Meta label="RICE" value={item.riceScore != null ? item.riceScore.toFixed(1) : '—'} />
         </div>
 
+        {/* Custom fields — created on the fly from the Asana field-mapping
+            panel; hidden entirely for items with none, shown only for the
+            fields that actually apply here. */}
+        {item.customFields && item.customFields.length > 0 && (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4 bg-canvas border-[0.5px] border-hairline rounded-frame p-4">
+            {item.customFields.map((f) => (
+              <Meta key={f.name} label={f.name} value={f.value} />
+            ))}
+          </div>
+        )}
+
         {/* Activity — stacked channels (reads well at panel width) */}
         <div className="mt-6 flex flex-col gap-5">
           <Eyebrow>Activity</Eyebrow>

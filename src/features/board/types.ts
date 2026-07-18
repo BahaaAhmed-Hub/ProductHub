@@ -18,6 +18,7 @@ export interface BoardItem {
   releaseId?: string;
   createdAt?: string;
   planBucket?: string; // backlog | planned | in_cycle
+  customFields?: { name: string; value: string }[];
 }
 
 export interface ItemNote {
