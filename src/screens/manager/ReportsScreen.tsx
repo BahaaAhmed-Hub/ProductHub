@@ -1,15 +1,26 @@
-import { useState, type RefObject } from 'react';
+import { useState, type FormEvent, type RefObject } from 'react';
+import clsx from 'clsx';
 import { GridLayout, useContainerWidth, type Layout, type LayoutItem } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { TopNav } from '@/components/layout/TopNav';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { useBoardItems } from '@/features/board/hooks';
-import { useReportWidgets, useReportWidgetActions, WIDGET_LIBRARY, type ReportWidget } from '@/features/reports';
+import {
+  useReportWidgets, useReportWidgetActions, WIDGET_LIBRARY, CHART_SWITCHABLE_KINDS,
+  type ReportWidget, type ChartType,
+} from '@/features/reports';
 import { WidgetContent } from '@/features/reports/widgets';
 import type { BoardItem } from '@/features/board/types';
 
 const GRID_CONFIG = { cols: 12, rowHeight: 32, margin: [16, 16] as const };
+
+const CHART_TYPES: { type: ChartType; icon: string; label: string }[] = [
+  { type: 'bar', icon: 'bar_chart', label: 'Bar' },
+  { type: 'pie', icon: 'pie_chart', label: 'Pie' },
+  { type: 'list', icon: 'format_list_bulleted', label: 'Ranked list' },
+  { type: 'number', icon: 'numbers', label: 'Number' },
+];
 
 function downloadCsv(items: BoardItem[]) {
   const header = ['ref', 'title', 'type', 'status', 'priority', 'rice', 'wsjf', 'effort'];
@@ -29,13 +40,17 @@ function WidgetCard({
   widget,
   onRename,
   onRemove,
+  onChangeChartType,
 }: {
   widget: ReportWidget;
   onRename: (title: string) => void;
   onRemove: () => void;
+  onChangeChartType: (type: ChartType) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(widget.title);
+  const [pickingChart, setPickingChart] = useState(false);
+  const switchable = CHART_SWITCHABLE_KINDS.includes(widget.kind);
 
   function commit() {
     setEditing(false);
@@ -73,6 +88,41 @@ function WidgetCard({
             {widget.title}
           </button>
         )}
+        {switchable && (
+          <div className="relative flex-shrink-0">
+            <button
+              className="text-label hover:text-accent"
+              onClick={(e) => { e.stopPropagation(); setPickingChart((p) => !p); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              aria-label="Change chart type"
+              title="Change chart type"
+            >
+              <Icon name={CHART_TYPES.find((c) => c.type === widget.chartType)?.icon ?? 'bar_chart'} size={15} />
+            </button>
+            {pickingChart && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setPickingChart(false)} onMouseDown={(e) => e.stopPropagation()} />
+                <div
+                  className="absolute right-0 top-6 z-50 w-[150px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop overflow-hidden"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {CHART_TYPES.map((c) => (
+                    <button
+                      key={c.type}
+                      className={clsx(
+                        'w-full flex items-center gap-2 text-left px-3 py-2 text-[12px] hover:bg-[#F4F3F0]',
+                        c.type === widget.chartType && 'text-accent font-medium',
+                      )}
+                      onClick={() => { onChangeChartType(c.type); setPickingChart(false); }}
+                    >
+                      <Icon name={c.icon} size={14} /> {c.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <button
           className="text-label hover:text-danger flex-shrink-0"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
@@ -83,7 +133,7 @@ function WidgetCard({
         </button>
       </div>
       <div className="flex-1 min-h-0 p-3 flex flex-col">
-        <WidgetContent kind={widget.kind} />
+        <WidgetContent widget={widget} />
       </div>
     </div>
   );
@@ -98,20 +148,45 @@ export function ReportsScreen() {
   const { widgets } = useReportWidgets();
   const actions = useReportWidgetActions();
   const [picking, setPicking] = useState(false);
+  const [showCustom, setShowCustom] = useState(false);
+  const [customDescription, setCustomDescription] = useState('');
+  const [customChartType, setCustomChartType] = useState<ChartType>('bar');
+  const [customBusy, setCustomBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { width, containerRef, mounted } = useContainerWidth();
+
+  const addedKinds = new Set(widgets.map((w) => w.kind));
 
   function nextY(): number {
     return widgets.length === 0 ? 0 : Math.max(...widgets.map((w) => w.y + w.h));
   }
 
   async function onAdd(kind: (typeof WIDGET_LIBRARY)[number]) {
+    if (addedKinds.has(kind.kind)) return;
     setPicking(false);
     setError(null);
     try {
       await actions.add(kind.kind, kind.defaultTitle, { x: 0, y: nextY(), w: 4, h: 4 });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add widget.');
+    }
+  }
+
+  async function onAddCustom(e: FormEvent) {
+    e.preventDefault();
+    const description = customDescription.trim();
+    if (!description) return;
+    setCustomBusy(true);
+    setError(null);
+    try {
+      await actions.addCustom(description, customChartType, { x: 0, y: nextY(), w: 4, h: 4 });
+      setShowCustom(false);
+      setCustomDescription('');
+      setCustomChartType('bar');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not generate that widget.');
+    } finally {
+      setCustomBusy(false);
     }
   }
 
@@ -149,16 +224,30 @@ export function ReportsScreen() {
             {picking && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setPicking(false)} />
-                <div className="absolute right-0 top-11 z-50 w-[220px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop overflow-hidden">
-                  {WIDGET_LIBRARY.map((w) => (
-                    <button
-                      key={w.kind}
-                      className="w-full text-left px-3 py-2.5 text-[13px] hover:bg-[#F4F3F0] border-b-[0.5px] border-hairline last:border-0"
-                      onClick={() => onAdd(w)}
-                    >
-                      {w.label}
-                    </button>
-                  ))}
+                <div className="absolute right-0 top-11 z-50 w-[240px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop overflow-hidden">
+                  {WIDGET_LIBRARY.map((w) => {
+                    const added = addedKinds.has(w.kind);
+                    return (
+                      <button
+                        key={w.kind}
+                        disabled={added}
+                        className={clsx(
+                          'w-full flex items-center justify-between text-left px-3 py-2.5 text-[13px] border-b-[0.5px] border-hairline last:border-0',
+                          added ? 'text-label cursor-default' : 'hover:bg-[#F4F3F0]',
+                        )}
+                        onClick={() => onAdd(w)}
+                      >
+                        {w.label}
+                        {added && <Icon name="check" size={14} className="text-label" />}
+                      </button>
+                    );
+                  })}
+                  <button
+                    className="w-full flex items-center gap-2 text-left px-3 py-2.5 text-[13px] text-accent font-medium hover:bg-[#F4F3F0]"
+                    onClick={() => { setPicking(false); setShowCustom(true); }}
+                  >
+                    <Icon name="auto_fix" size={14} /> Custom widget (AI)…
+                  </button>
                 </div>
               </>
             )}
@@ -191,6 +280,7 @@ export function ReportsScreen() {
                       widget={w}
                       onRename={(title) => actions.rename(w.id, title)}
                       onRemove={() => actions.remove(w.id)}
+                      onChangeChartType={(type) => actions.changeChartType(w.id, type)}
                     />
                   </div>
                 ))}
@@ -199,6 +289,62 @@ export function ReportsScreen() {
           </div>
         )}
       </div>
+
+      {showCustom && (
+        <div
+          className="fixed inset-0 z-[100] bg-navy/40 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => !customBusy && setShowCustom(false)}
+        >
+          <div
+            className="w-[420px] bg-surface rounded-frame shadow-pop p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Icon name="auto_fix" size={16} className="text-accent" />
+              <span className="text-[15px] font-semibold">Custom widget</span>
+            </div>
+            <p className="text-[12.5px] text-label mb-3">
+              Describe what you want to see — AI picks the data, you pick how it's drawn.
+            </p>
+            <form onSubmit={onAddCustom} className="flex flex-col gap-3">
+              <textarea
+                autoFocus
+                value={customDescription}
+                onChange={(e) => setCustomDescription(e.target.value)}
+                placeholder="e.g. Critical bugs by assignee, or average estimated hours per module"
+                rows={3}
+                className="w-full px-3 py-2 rounded-control border-[0.5px] border-hairline bg-canvas text-[13px] outline-none focus:border-accent resize-none"
+              />
+              <div className="flex items-center gap-1.5">
+                {CHART_TYPES.map((c) => (
+                  <button
+                    key={c.type}
+                    type="button"
+                    onClick={() => setCustomChartType(c.type)}
+                    className={clsx(
+                      'flex items-center gap-1.5 px-2.5 h-8 rounded-control border-[0.5px] text-[12px]',
+                      customChartType === c.type
+                        ? 'border-accent bg-accent-bg text-navy font-medium'
+                        : 'border-hairline text-body hover:bg-[#F4F3F0]',
+                    )}
+                  >
+                    <Icon name={c.icon} size={14} /> {c.label}
+                  </button>
+                ))}
+              </div>
+              {error && <div className="text-[12px] text-danger">{error}</div>}
+              <div className="flex items-center gap-2 mt-1">
+                <Button type="submit" className="flex-1" disabled={customBusy || !customDescription.trim()}>
+                  {customBusy ? 'Generating…' : 'Add widget'}
+                </Button>
+                <Button type="button" variant="ghost" disabled={customBusy} onClick={() => setShowCustom(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

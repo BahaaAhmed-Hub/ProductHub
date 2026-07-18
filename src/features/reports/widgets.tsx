@@ -1,12 +1,41 @@
 import { Icon } from '@/components/ui/Icon';
 import { useBoardItems } from '@/features/board/hooks';
 import type { BoardItem } from '@/features/board/types';
-import type { WidgetKind } from './index';
+import type { ReportWidget } from './index';
+import { computeSpecData } from './customSpec';
+
+const CHART_COLORS = ['#534AB7', '#378ADD', '#1D9E75', '#B8860B', '#9c2b29', '#8A5A0B', '#3F3791', '#888780'];
 
 function tally<T extends string>(items: BoardItem[], key: (i: BoardItem) => T): { label: T; n: number }[] {
   const m = new Map<T, number>();
   for (const i of items) m.set(key(i), (m.get(key(i)) ?? 0) + 1);
   return [...m.entries()].map(([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n);
+}
+
+/** {label,n}[] driving every switchable-chart-type widget: the fixed-kind
+ * tallies (by_type/by_status/...) or a custom widget's AI-derived spec,
+ * computed the same way so any of them can render as bar/pie/list/number. */
+function tallyData(items: BoardItem[], widget: ReportWidget): { label: string; n: number }[] {
+  switch (widget.kind) {
+    case 'by_type':
+      return tally(items, (i) => i.type);
+    case 'by_status':
+      return tally(items, (i) => i.boardStatus);
+    case 'by_priority':
+      return tally(items, (i) => i.priority);
+    case 'team_workload':
+      return tally(items.filter((i) => i.assigneeName), (i) => i.assigneeName!);
+    case 'rice_top':
+      return [...items]
+        .filter((i) => i.riceScore != null)
+        .sort((a, b) => (b.riceScore ?? 0) - (a.riceScore ?? 0))
+        .slice(0, 8)
+        .map((i) => ({ label: i.title, n: Number((i.riceScore ?? 0).toFixed(1)) }));
+    case 'custom':
+      return computeSpecData(items, widget.spec);
+    default:
+      return [];
+  }
 }
 
 function BarList({ data }: { data: { label: string; n: number }[] }) {
@@ -20,9 +49,61 @@ function BarList({ data }: { data: { label: string; n: number }[] }) {
           <div className="flex-1 h-2 rounded-full bg-[#ECEBE7] overflow-hidden">
             <div className="h-full bg-pm rounded-full" style={{ width: `${(d.n / max) * 100}%` }} />
           </div>
-          <span className="text-[12px] font-mono w-6 text-right flex-shrink-0">{d.n}</span>
+          <span className="text-[12px] font-mono w-10 text-right flex-shrink-0">{d.n}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function PieChart({ data }: { data: { label: string; n: number }[] }) {
+  const total = data.reduce((s, d) => s + d.n, 0);
+  if (total === 0 || data.length === 0) return <p className="text-[13px] text-body">No data.</p>;
+  let acc = 0;
+  const stops = data.map((d, i) => {
+    const start = (acc / total) * 100;
+    acc += d.n;
+    const end = (acc / total) * 100;
+    return `${CHART_COLORS[i % CHART_COLORS.length]} ${start}% ${end}%`;
+  });
+  return (
+    <div className="flex items-center gap-4 flex-1 min-h-0">
+      <div className="w-20 h-20 rounded-full flex-shrink-0" style={{ background: `conic-gradient(${stops.join(', ')})` }} />
+      <div className="flex-1 min-w-0 overflow-y-auto scroll-thin flex flex-col gap-1.5">
+        {data.map((d, i) => (
+          <div key={d.label} className="flex items-center gap-1.5 text-[11px]">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+            <span className="truncate flex-1 capitalize">{d.label.replace(/_/g, ' ')}</span>
+            <span className="font-mono text-label flex-shrink-0">{d.n}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RankedList({ data }: { data: { label: string; n: number }[] }) {
+  if (data.length === 0) return <p className="text-[13px] text-body">No data.</p>;
+  return (
+    <div className="flex-1 overflow-y-auto scroll-thin flex flex-col gap-1.5 min-h-0">
+      {data.map((d, idx) => (
+        <div key={d.label} className="flex items-center gap-2 text-[12px]">
+          <span className="w-4 text-label flex-shrink-0">{idx + 1}</span>
+          <span className="truncate flex-1 capitalize">{d.label.replace(/_/g, ' ')}</span>
+          <span className="font-mono font-semibold text-pm flex-shrink-0">{d.n}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NumberStat({ data }: { data: { label: string; n: number }[] }) {
+  const total = data.reduce((s, d) => s + d.n, 0);
+  const top = data[0];
+  return (
+    <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center">
+      <div className="text-4xl font-semibold text-pm">{total}</div>
+      {top && <div className="text-[12px] text-label mt-1 capitalize">top: {top.label.replace(/_/g, ' ')} ({top.n})</div>}
     </div>
   );
 }
@@ -35,21 +116,14 @@ function isBreached(item: BoardItem): boolean {
   return elapsed > target;
 }
 
-/** Renders the right content for a widget kind — the library WIDGET_LIBRARY
- * offers, computed straight from the board items already in cache (no
- * extra fetch per widget). */
-export function WidgetContent({ kind }: { kind: WidgetKind }) {
+/** Renders a widget's content — the fixed-kind tallies and custom (AI) specs
+ * share one chart-type-switchable renderer (bar/pie/list/number); the two
+ * feed/stat kinds (sla_breaches, recent_activity) keep their own fixed
+ * presentation, since a bar or pie chart wouldn't mean anything for them. */
+export function WidgetContent({ widget }: { widget: ReportWidget }) {
   const { items } = useBoardItems();
 
-  if (kind === 'by_type') return <BarList data={tally(items, (i) => i.type)} />;
-  if (kind === 'by_status') return <BarList data={tally(items, (i) => i.boardStatus)} />;
-  if (kind === 'by_priority') return <BarList data={tally(items, (i) => i.priority)} />;
-
-  if (kind === 'team_workload') {
-    return <BarList data={tally(items.filter((i) => i.assigneeName), (i) => i.assigneeName!)} />;
-  }
-
-  if (kind === 'sla_breaches') {
+  if (widget.kind === 'sla_breaches') {
     const breached = items.filter(isBreached);
     return (
       <div className="flex flex-col h-full min-h-0">
@@ -68,7 +142,7 @@ export function WidgetContent({ kind }: { kind: WidgetKind }) {
     );
   }
 
-  if (kind === 'recent_activity') {
+  if (widget.kind === 'recent_activity') {
     const recent = [...items]
       .filter((i) => i.createdAt)
       .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
@@ -87,21 +161,9 @@ export function WidgetContent({ kind }: { kind: WidgetKind }) {
     );
   }
 
-  if (kind === 'rice_top') {
-    const top = [...items].filter((i) => i.riceScore != null).sort((a, b) => (b.riceScore ?? 0) - (a.riceScore ?? 0)).slice(0, 8);
-    return (
-      <div className="flex-1 overflow-y-auto scroll-thin flex flex-col gap-1.5 min-h-0">
-        {top.map((i, idx) => (
-          <div key={i.id} className="flex items-center gap-2 text-[12px]">
-            <span className="w-4 text-label flex-shrink-0">{idx + 1}</span>
-            <span className="truncate flex-1">{i.title}</span>
-            <span className="font-mono font-semibold text-pm flex-shrink-0">{i.riceScore?.toFixed(1)}</span>
-          </div>
-        ))}
-        {top.length === 0 && <p className="text-[12px] text-body">No RICE scores yet.</p>}
-      </div>
-    );
-  }
-
-  return null;
+  const data = tallyData(items, widget);
+  if (widget.chartType === 'pie') return <PieChart data={data} />;
+  if (widget.chartType === 'number') return <NumberStat data={data} />;
+  if (widget.chartType === 'list') return <RankedList data={data} />;
+  return <BarList data={data} />;
 }

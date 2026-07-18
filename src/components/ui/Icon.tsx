@@ -6,7 +6,7 @@ import {
   FlaskConical, Search, Repeat, ScrollText, SlidersHorizontal, TrendingUp,
   TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight, Copy,
   Link2, Rocket, Building2, HourglassIcon, CircleCheck, CreditCard,
-  Settings, Mail, Send,
+  Settings, Mail, Send, BarChart3, PieChart, Hash, WandSparkles,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -72,6 +72,10 @@ const MAP: Record<string, LucideIcon> = {
   settings: Settings,
   mail: Mail,
   send: Send,
+  bar_chart: BarChart3,
+  pie_chart: PieChart,
+  numbers: Hash,
+  auto_fix: WandSparkles,
 };
 
 interface IconProps {

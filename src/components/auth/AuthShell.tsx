@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Logo } from '@/components/ui/Logo';
 
 /** Shared dark navy hero + centered card shell for sign-in, signup, and join. */
 export function AuthShell({ children, width = 400 }: { children: ReactNode; width?: number }) {
@@ -11,9 +12,7 @@ export function AuthShell({ children, width = 400 }: { children: ReactNode; widt
       }}
     >
       <div className="absolute top-6 left-6 flex items-center gap-2 text-white/90">
-        <div className="w-5 h-5 rounded-md bg-white/15 text-white text-xs font-bold flex items-center justify-center">
-          P
-        </div>
+        <Logo size={20} />
         <span className="text-sm font-semibold tracking-tight">ProductHub</span>
       </div>
 

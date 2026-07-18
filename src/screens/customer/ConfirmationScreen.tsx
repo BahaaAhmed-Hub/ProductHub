@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
+import { Logo } from '@/components/ui/Logo';
 import type { Priority } from '@/types/domain';
 
 /** Screen 03 — request received confirmation. Dark hero + centered success card. */
@@ -18,9 +19,7 @@ export function ConfirmationScreen() {
       }}
     >
       <div className="absolute top-6 left-6 flex items-center gap-2 text-white/90">
-        <div className="w-5 h-5 rounded-md bg-white/15 text-white text-xs font-bold flex items-center justify-center">
-          P
-        </div>
+        <Logo size={20} />
         <span className="text-sm font-semibold tracking-tight">ProductHub</span>
       </div>
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
+import { Logo } from '@/components/ui/Logo';
 import { NotificationBell } from '@/components/ui/NotificationBell';
 import { useAuth } from '@/features/auth/AuthProvider';
 
@@ -32,9 +33,7 @@ export function CustomerLayout() {
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-canvas">
       <header className="h-14 flex-shrink-0 border-b-[0.5px] border-hairline bg-surface flex items-center justify-between px-6">
         <Link to="/requests" className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-navy text-white text-xs font-bold flex items-center justify-center">
-            P
-          </div>
+          <Logo size={24} className="text-navy" />
           <span className="text-sm font-semibold tracking-tight">ProductHub</span>
           <span className="text-hairline">/</span>
           <span className="text-sm text-label">{crumb(pathname)}</span>

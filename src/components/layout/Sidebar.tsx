@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { NAV } from '@/app/navConfig';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
+import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useSettingsModalStore } from '@/features/settings/store';
 
@@ -37,9 +38,7 @@ export function Sidebar() {
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin flex flex-col gap-4">
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-2">
-          <div className="w-[60px] h-[60px] rounded-xl bg-navy text-white text-2xl font-bold flex items-center justify-center flex-shrink-0">
-            P
-          </div>
+          <Logo size={60} className="text-navy flex-shrink-0" />
           <span className="text-sm font-semibold tracking-tight">ProductHub</span>
         </div>
 

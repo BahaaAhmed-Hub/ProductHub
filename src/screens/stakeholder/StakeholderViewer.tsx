@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
+import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { BUCKETS, useRoadmap } from '@/features/roadmap';
 
@@ -14,7 +15,7 @@ export function StakeholderViewer() {
     <div className="min-h-screen w-screen flex flex-col bg-canvas">
       <header className="h-16 flex-shrink-0 border-b-[0.5px] border-hairline bg-surface flex items-center justify-between px-8">
         <Link to="/viewer" className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-navy text-white text-xs font-bold flex items-center justify-center">P</div>
+          <Logo size={24} className="text-navy" />
           <span className="text-sm font-semibold tracking-tight">ProductHub</span>
           <span className="text-hairline">/</span>
           <span className="text-sm text-label">Stakeholder view</span>

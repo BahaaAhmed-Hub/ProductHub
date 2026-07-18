@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Icon } from '@/components/ui/Icon';
+import { Logo } from '@/components/ui/Logo';
 
 const PLANS = [
   {
@@ -28,7 +29,7 @@ export function PlansScreen() {
     <div className="min-h-screen w-screen bg-canvas flex flex-col">
       <header className="h-16 flex-shrink-0 border-b-[0.5px] border-hairline bg-surface flex items-center justify-between px-8">
         <Link to="/plans" className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-navy text-white text-xs font-bold flex items-center justify-center">P</div>
+          <Logo size={24} className="text-navy" />
           <span className="text-sm font-semibold tracking-tight">ProductHub</span>
         </Link>
         <Link to="/signin" className="text-[13px] font-medium text-navy">Sign in</Link>
