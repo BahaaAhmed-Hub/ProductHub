@@ -33,7 +33,10 @@ export interface AsanaField {
   options: string[];
 }
 
-export type MappingTarget = 'board_status' | 'priority' | 'type' | 'description' | 'custom' | 'ignore';
+export type MappingTarget =
+  | 'board_status' | 'priority' | 'type' | 'description' | 'custom'
+  | 'estimated_hours' | 'customer_name' | 'module' | 'tags'
+  | 'ignore';
 
 export interface FieldMapping {
   sourceField: string;

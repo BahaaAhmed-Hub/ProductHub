@@ -7,6 +7,7 @@ import type { Priority, RequestType } from '@/types/domain';
 const TYPE_OPTIONS: { value: RequestType; label: string }[] = [
   { value: 'feature', label: 'Feature' },
   { value: 'bug', label: 'Bug' },
+  { value: 'request', label: 'Request' },
   { value: 'query', label: 'Task' },
 ];
 const PRIORITY_OPTIONS: Priority[] = ['low', 'medium', 'high', 'critical'];

@@ -8,6 +8,7 @@ const refPrefix: Record<RequestDraft['type'], string> = {
   bug: 'BUG',
   feature: 'FEAT',
   query: 'QRY',
+  request: 'REQ',
 };
 
 interface RequestsState {

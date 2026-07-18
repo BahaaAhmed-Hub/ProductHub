@@ -20,6 +20,10 @@ const COLMAP: Record<string, string> = {
   releaseId: 'release_id',
   planBucket: 'plan_bucket',
   boardStatus: 'board_status',
+  estimatedHours: 'estimated_hours',
+  customerName: 'customer_name',
+  module: 'module',
+  tags: 'tags',
 };
 
 export function useBoardItems(): { items: BoardItem[]; isLoading: boolean } {
@@ -58,7 +62,12 @@ export function useUpdateRice() {
 export function useUpdateItem() {
   const qc = useQueryClient();
   const patch = useBoardStore((s) => s.patch);
-  return async (id: string, fields: Partial<BoardItem>): Promise<void> => {
+  // Record<keyof BoardItem, unknown>, not Partial<BoardItem> — callers need
+  // to pass an explicit null to clear a field back to empty (e.g. blurring
+  // an emptied input), and Partial<BoardItem>'s non-nullable optional props
+  // would reject that even though it's exactly what an UPDATE needs to
+  // distinguish "clear this" from "don't touch this" (an omitted key).
+  return async (id: string, fields: Partial<Record<keyof BoardItem, unknown>>): Promise<void> => {
     if (isSupabaseConfigured) {
       const dbFields: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(fields)) dbFields[COLMAP[k] ?? k] = v;
@@ -66,7 +75,7 @@ export function useUpdateItem() {
       await qc.invalidateQueries({ queryKey: ['board'] });
       return;
     }
-    patch(id, fields);
+    patch(id, fields as Partial<BoardItem>);
   };
 }
 

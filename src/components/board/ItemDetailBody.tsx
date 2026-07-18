@@ -5,8 +5,8 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Eyebrow } from '@/components/ui/Card';
 import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
 import { Segmented } from '@/components/ui/Segmented';
-import { useBoardItems, useItemNotes, useAddNote, useMoveItem } from '@/features/board/hooks';
-import type { ItemNote } from '@/features/board/types';
+import { useBoardItems, useItemNotes, useAddNote, useMoveItem, useUpdateItem } from '@/features/board/hooks';
+import type { BoardItem, ItemNote } from '@/features/board/types';
 
 /**
  * Shared item-detail content — used by the Asana-style slide-over panel
@@ -85,6 +85,10 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
           <Meta label="RICE" value={item.riceScore != null ? item.riceScore.toFixed(1) : '—'} />
         </div>
 
+        {/* Default task fields — available on every item regardless of
+            source, editable inline. */}
+        <DefaultFields key={item.id} item={item} />
+
         {/* Custom fields — created on the fly from the Asana field-mapping
             panel; hidden entirely for items with none, shown only for the
             fields that actually apply here. */}
@@ -150,6 +154,85 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
     <div className="flex flex-col gap-1">
       <Eyebrow>{label}</Eyebrow>
       <div className="text-[13px]">{value}</div>
+    </div>
+  );
+}
+
+const fieldInputClass =
+  'w-full text-[13px] bg-transparent outline-none border-b-[0.5px] border-transparent hover:border-hairline focus:border-accent pb-0.5';
+
+/** Estimated time, Customer name, Module, Tags — standard fields on every
+ * task regardless of source, editable directly here. Keyed by item.id in
+ * the parent so local edit state resets cleanly when the panel switches
+ * to a different item instead of carrying stale values over. */
+function DefaultFields({ item }: { item: BoardItem }) {
+  const updateItem = useUpdateItem();
+  const [estimatedHours, setEstimatedHours] = useState(item.estimatedHours != null ? String(item.estimatedHours) : '');
+  const [customerName, setCustomerName] = useState(item.customerName ?? '');
+  const [module, setModule] = useState(item.module ?? '');
+  const [tagsText, setTagsText] = useState((item.tags ?? []).join(', '));
+
+  function saveEstimatedHours() {
+    const n = estimatedHours.trim() === '' ? null : Number(estimatedHours);
+    if (n !== null && Number.isNaN(n)) return;
+    updateItem(item.id, { estimatedHours: n });
+  }
+  function saveCustomerName() {
+    updateItem(item.id, { customerName: customerName.trim() || null });
+  }
+  function saveModule() {
+    updateItem(item.id, { module: module.trim() || null });
+  }
+  function saveTags() {
+    const tags = tagsText.split(',').map((t) => t.trim()).filter(Boolean);
+    updateItem(item.id, { tags });
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4 bg-canvas border-[0.5px] border-hairline rounded-frame p-4">
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Estimated time (h)</Eyebrow>
+        <input
+          type="number"
+          min={0}
+          step="0.5"
+          value={estimatedHours}
+          onChange={(e) => setEstimatedHours(e.target.value)}
+          onBlur={saveEstimatedHours}
+          placeholder="—"
+          className={fieldInputClass}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Customer</Eyebrow>
+        <input
+          value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          onBlur={saveCustomerName}
+          placeholder="—"
+          className={fieldInputClass}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Module</Eyebrow>
+        <input
+          value={module}
+          onChange={(e) => setModule(e.target.value)}
+          onBlur={saveModule}
+          placeholder="—"
+          className={fieldInputClass}
+        />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Tags</Eyebrow>
+        <input
+          value={tagsText}
+          onChange={(e) => setTagsText(e.target.value)}
+          onBlur={saveTags}
+          placeholder="comma, separated"
+          className={fieldInputClass}
+        />
+      </div>
     </div>
   );
 }

@@ -29,10 +29,14 @@ interface ItemRow {
   assignee: { name: string } | null;
   external_assignee_name: string | null;
   custom_fields: Record<string, string> | null;
+  estimated_hours: number | null;
+  customer_name: string | null;
+  module: string | null;
+  tags: string[] | null;
 }
 
 const ITEM_SELECT =
-  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, external_assignee_name, custom_fields, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, external_assignee_name, custom_fields, estimated_hours, customer_name, module, tags, assignee:profiles!backlog_items_assignee_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const [{ data, error }, { data: defs, error: defsError }] = await Promise.all([
@@ -70,6 +74,10 @@ export async function listBoardItems(): Promise<BoardItem[]> {
             .filter((f): f is { name: string; value: string } => Boolean(f.name)),
         }
       : {}),
+    ...(r.estimated_hours != null ? { estimatedHours: Number(r.estimated_hours) } : {}),
+    ...(r.customer_name ? { customerName: r.customer_name } : {}),
+    ...(r.module ? { module: r.module } : {}),
+    ...(r.tags && r.tags.length > 0 ? { tags: r.tags } : {}),
   }));
 }
 
@@ -203,7 +211,7 @@ export async function addRequestToBoard(
   if (updErr) throw updErr;
 }
 
-const ITEM_PREFIX: Record<RequestType, string> = { bug: 'BUG', feature: 'FEAT', query: 'TASK' };
+const ITEM_PREFIX: Record<RequestType, string> = { bug: 'BUG', feature: 'FEAT', query: 'TASK', request: 'REQ' };
 
 export interface NewItemDraft {
   title: string;

@@ -19,6 +19,10 @@ export interface BoardItem {
   createdAt?: string;
   planBucket?: string; // backlog | planned | in_cycle
   customFields?: { name: string; value: string }[];
+  estimatedHours?: number;
+  customerName?: string;
+  module?: string;
+  tags?: string[];
 }
 
 export interface ItemNote {

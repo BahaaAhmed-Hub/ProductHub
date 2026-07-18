@@ -79,7 +79,7 @@ export async function getRequest(id: string): Promise<CustomerRequest | null> {
   return data ? mapRow(data as unknown as RequestRow) : null;
 }
 
-const prefix: Record<RequestType, string> = { bug: 'BUG', feature: 'FEAT', query: 'QRY' };
+const prefix: Record<RequestType, string> = { bug: 'BUG', feature: 'FEAT', query: 'QRY', request: 'REQ' };
 
 export async function createRequest(
   draft: RequestDraft,

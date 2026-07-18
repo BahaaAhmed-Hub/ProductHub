@@ -6,7 +6,7 @@
 
 export type Role = 'customer' | 'developer' | 'pm' | 'manager' | 'stakeholder';
 
-export type RequestType = 'bug' | 'feature' | 'query';
+export type RequestType = 'bug' | 'feature' | 'query' | 'request';
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 export type RequestStatus =
   | 'submitted'

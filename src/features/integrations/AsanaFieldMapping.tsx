@@ -19,21 +19,29 @@ const TARGET_LABEL: Record<DraftTarget, string> = {
   description: 'Append to description',
   custom: 'Custom field',
   __create_custom__: '+ Create custom field',
+  estimated_hours: 'Estimated time',
+  customer_name: 'Customer',
+  module: 'Module',
+  tags: 'Tags',
 };
 
 const ENUM_TARGET_OPTIONS: Record<'board_status' | 'priority' | 'type', string[]> = {
   board_status: ['triaged', 'in_development', 'in_qa', 'released'],
   priority: ['low', 'medium', 'high', 'critical'],
-  type: ['bug', 'feature', 'query'],
+  type: ['bug', 'feature', 'query', 'request'],
 };
+
+// Direct-value targets — no fixed option set, the field's raw (or
+// display_value-formatted) value is written straight into that column.
+const DIRECT_TARGETS: DraftTarget[] = ['description', 'estimated_hours', 'customer_name', 'module', 'tags', '__create_custom__'];
 
 /** 'enum' kind fields (a section, or an enum custom field) have a known set
  * of options and can translate into a ProductHub enum column. Every field,
- * regardless of kind, can also become its own custom field or be appended
- * to the description. */
+ * regardless of kind, can also land directly in one of the default task
+ * fields, become its own custom field, or be appended to the description. */
 function targetsFor(field: AsanaField): DraftTarget[] {
-  const base: DraftTarget[] = ['ignore', 'description', '__create_custom__'];
-  return field.kind === 'enum' ? ['ignore', 'board_status', 'priority', 'type', 'description', '__create_custom__'] : base;
+  const base: DraftTarget[] = ['ignore', ...DIRECT_TARGETS];
+  return field.kind === 'enum' ? ['ignore', 'board_status', 'priority', 'type', ...DIRECT_TARGETS] : base;
 }
 
 interface Draft {
@@ -92,6 +100,11 @@ function FieldMappingRow({
       )}
       {draft.target === 'description' && (
         <div className="mt-1.5 pl-2 text-[11px] text-label">Appended as "{field.label}: value" on every synced item.</div>
+      )}
+      {(draft.target === 'estimated_hours' || draft.target === 'customer_name' || draft.target === 'module' || draft.target === 'tags') && (
+        <div className="mt-1.5 pl-2 text-[11px] text-label">
+          Written into every synced item's {TARGET_LABEL[draft.target]} field, overwriting whatever's there.
+        </div>
       )}
       {(draft.target === '__create_custom__' || draft.target === 'custom') && (
         <div className="mt-1.5 pl-2 text-[11px] text-label">
@@ -183,7 +196,8 @@ export function AsanaFieldMapping({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p className="text-[11px] text-label mb-2">
-        Map every field this project has onto status, priority, type, a new custom field, or the description. Unmapped fields aren't synced.
+        Map every field this project has onto status, priority, type, estimated time, customer, module, tags, a new
+        custom field, or the description. Unmapped fields aren't synced.
       </p>
       {isLoading ? (
         <div className="text-[12px] text-label py-2">Loading fields…</div>

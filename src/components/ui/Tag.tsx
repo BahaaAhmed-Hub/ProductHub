@@ -43,11 +43,13 @@ const typeTone: Record<RequestType, Tone> = {
   bug: 'danger',
   feature: 'pm',
   query: 'accent',
+  request: 'warn',
 };
 const typeLabel: Record<RequestType, string> = {
   bug: 'Bug',
   feature: 'Feature',
   query: 'Query',
+  request: 'Request',
 };
 
 export function TypeTag({ type }: { type: RequestType }) {

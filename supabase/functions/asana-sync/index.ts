@@ -45,10 +45,14 @@ interface AsanaStory {
   text: string;
   created_by: { name: string; email: string } | null;
 }
+type TargetField =
+  | 'board_status' | 'priority' | 'type' | 'description' | 'custom'
+  | 'estimated_hours' | 'customer_name' | 'module' | 'tags'
+  | 'ignore';
 interface FieldMapping {
   source_field: string;
   source_label: string;
-  target_field: 'board_status' | 'priority' | 'type' | 'description' | 'custom' | 'ignore';
+  target_field: TargetField;
   value_map: Record<string, string>;
   custom_field_def_id: string | null;
 }
@@ -130,7 +134,23 @@ Deno.serve(async (req) => {
     const enumMappings = mappingRows.filter((m) => ['board_status', 'priority', 'type'].includes(m.target_field));
     const descriptionMappings = mappingRows.filter((m) => m.target_field === 'description');
     const customMappings = mappingRows.filter((m) => m.target_field === 'custom' && m.custom_field_def_id);
+    const directMappings = (target: TargetField) => mappingRows.filter((m) => m.target_field === target);
+    const estimatedHoursMappings = directMappings('estimated_hours');
+    const customerNameMappings = directMappings('customer_name');
+    const moduleMappings = directMappings('module');
+    const tagsMappings = directMappings('tags');
     const profileByEmail = new Map(profileRows.map((p) => [p.email.toLowerCase(), p.id]));
+
+    /** Last mapping targeting this field wins if more than one is
+     * configured — mirrors the enum-mapping precedence above. */
+    function lastMappedValue(t: AsanaTask, mappings: FieldMapping[]): string | undefined {
+      let found: string | undefined;
+      for (const m of mappings) {
+        const val = displayValue(t, m.source_field);
+        if (val) found = val;
+      }
+      return found;
+    }
 
     const rows = tasks.map((t) => {
       let board_status: string | undefined;
@@ -170,6 +190,14 @@ Deno.serve(async (req) => {
       const assignee_id = assigneeEmail ? (profileByEmail.get(assigneeEmail) ?? null) : null;
       const external_assignee_name = !assignee_id && t.assignee ? t.assignee.name : null;
 
+      const estimatedRaw = lastMappedValue(t, estimatedHoursMappings);
+      const estimatedNum = estimatedRaw ? Number(estimatedRaw.replace(/[^0-9.]/g, '')) : NaN;
+      const estimated_hours = Number.isFinite(estimatedNum) ? estimatedNum : null;
+      const customer_name = lastMappedValue(t, customerNameMappings) ?? null;
+      const module = lastMappedValue(t, moduleMappings) ?? null;
+      const tagsRaw = lastMappedValue(t, tagsMappings);
+      const tags = tagsRaw ? tagsRaw.split(',').map((x) => x.trim()).filter(Boolean) : [];
+
       return {
         workspace_id: caller.workspaceId,
         ref: refFor(t.gid),
@@ -177,6 +205,10 @@ Deno.serve(async (req) => {
         description,
         type: type ?? 'feature',
         board_status,
+        estimated_hours,
+        customer_name,
+        module,
+        tags,
         priority: priority ?? 'medium',
         assignee_id,
         external_assignee_name,
