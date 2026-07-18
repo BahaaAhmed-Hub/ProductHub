@@ -3,7 +3,11 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
-import { addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields, listItemNotes, addItemNote, createBoardItem, type NewItemDraft } from './api';
+import {
+  addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields,
+  listItemNotes, addItemNote, createBoardItem, bulkUpdateBoardStatus, bulkAssign, bulkDeleteItems,
+  type NewItemDraft,
+} from './api';
 import type { BoardItem, ItemNote, TriageRequest } from './types';
 
 /** camelCase BoardItem fields → snake_case DB columns for updateItemFields. */
@@ -63,6 +67,43 @@ export function useUpdateItem() {
       return;
     }
     patch(id, fields);
+  };
+}
+
+/** Backlog multi-select actions — one round trip per action in real mode
+ * (an .in('id', ids) update/delete), a loop over the mock store otherwise. */
+export function useBulkActions() {
+  const qc = useQueryClient();
+  const mockMove = useBoardStore((s) => s.moveItem);
+  const mockDelete = useBoardStore((s) => s.deleteItems);
+  const mockAssign = useBoardStore((s) => s.bulkAssign);
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['board'] });
+
+  return {
+    async complete(ids: string[]): Promise<void> {
+      if (isSupabaseConfigured) {
+        await bulkUpdateBoardStatus(ids, 'released');
+        await invalidate();
+        return;
+      }
+      ids.forEach((id) => mockMove(id, 'released'));
+    },
+    async remove(ids: string[]): Promise<void> {
+      if (isSupabaseConfigured) {
+        await bulkDeleteItems(ids);
+        await invalidate();
+        return;
+      }
+      mockDelete(ids);
+    },
+    async assign(ids: string[], assignee: { id: string; name: string; initials: string } | null): Promise<void> {
+      if (isSupabaseConfigured) {
+        await bulkAssign(ids, assignee?.id ?? null);
+        await invalidate();
+        return;
+      }
+      mockAssign(ids, assignee ? { name: assignee.name, initials: assignee.initials } : null);
+    },
   };
 }
 

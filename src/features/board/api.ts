@@ -119,6 +119,22 @@ export async function updateRiceScore(id: string, score: number): Promise<void> 
   if (error) throw error;
 }
 
+// ---------- bulk actions (Backlog multi-select) ----------
+export async function bulkUpdateBoardStatus(ids: string[], status: BoardStatus): Promise<void> {
+  const { error } = await supabase.from('backlog_items').update({ board_status: status }).in('id', ids);
+  if (error) throw error;
+}
+
+export async function bulkAssign(ids: string[], assigneeId: string | null): Promise<void> {
+  const { error } = await supabase.from('backlog_items').update({ assignee_id: assigneeId }).in('id', ids);
+  if (error) throw error;
+}
+
+export async function bulkDeleteItems(ids: string[]): Promise<void> {
+  const { error } = await supabase.from('backlog_items').delete().in('id', ids);
+  if (error) throw error;
+}
+
 interface TriageRow {
   id: string;
   ref: string;

@@ -15,6 +15,8 @@ interface BoardState {
   setRice: (id: string, score: number) => void;
   patch: (id: string, fields: Partial<BoardItem>) => void;
   addNote: (itemId: string, note: ItemNote) => void;
+  deleteItems: (ids: string[]) => void;
+  bulkAssign: (ids: string[], assignee: { name: string; initials: string } | null) => void;
 }
 
 export const useBoardStore = create<BoardState>((set) => ({
@@ -57,4 +59,18 @@ export const useBoardStore = create<BoardState>((set) => ({
     set((s) => ({ items: s.items.map((i) => (i.id === id ? { ...i, ...fields } : i)) })),
   addNote: (itemId, note) =>
     set((s) => ({ notes: { ...s.notes, [itemId]: [...(s.notes[itemId] ?? []), note] } })),
+  deleteItems: (ids) =>
+    set((s) => {
+      const drop = new Set(ids);
+      return { items: s.items.filter((i) => !drop.has(i.id)) };
+    }),
+  bulkAssign: (ids, assignee) =>
+    set((s) => {
+      const pick = new Set(ids);
+      return {
+        items: s.items.map((i) =>
+          pick.has(i.id) ? { ...i, assigneeName: assignee?.name, assigneeInitials: assignee?.initials } : i,
+        ),
+      };
+    }),
 }));
