@@ -8,6 +8,7 @@ import {
   connectAsana, useAsanaConnection, useAsanaProjects, useAsanaActions, REDIRECT_URI,
   type AsanaProjectGroup,
 } from '@/features/integrations/asana';
+import { AsanaFieldMapping } from '@/features/integrations/AsanaFieldMapping';
 
 interface Integration {
   key: string;
@@ -39,6 +40,7 @@ function AsanaCard() {
   const { groups, isLoading: projectsLoading, load } = useAsanaProjects();
   const actions = useAsanaActions();
   const [picking, setPicking] = useState(false);
+  const [mapping, setMapping] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,8 +74,8 @@ function AsanaCard() {
     setError(null);
     setSyncNote(null);
     try {
-      const { imported, total } = await actions.sync();
-      setSyncNote(`Synced ${imported} of ${total} tasks.`);
+      const { imported, total, commentsImported } = await actions.sync();
+      setSyncNote(`Synced ${imported} of ${total} tasks, ${commentsImported} comments.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed.');
     } finally {
@@ -93,7 +95,7 @@ function AsanaCard() {
   }
 
   return (
-    <Card className="p-5 flex flex-col gap-3 col-span-2 sm:col-span-1">
+    <Card className="p-5 flex flex-col gap-3 col-span-2">
       <div className="flex items-start justify-between">
         <div className="w-11 h-11 rounded-[12px] bg-[#F2F1EE] flex items-center justify-center text-xl">🅰️</div>
         {connection.connected && <Tag tone="success">Connected</Tag>}
@@ -154,12 +156,16 @@ function AsanaCard() {
             <Button variant="secondary" icon="sprint" className="flex-1" disabled={syncing} onClick={onSync}>
               {syncing ? 'Syncing…' : 'Sync now'}
             </Button>
+            <Button variant="secondary" icon="tune" onClick={() => setMapping((m) => !m)}>
+              {mapping ? 'Hide field mapping' : 'Field mapping'}
+            </Button>
             <Button variant="ghost" onClick={onDisconnect}>Disconnect</Button>
           </div>
           {syncNote && <div className="text-[11px] text-success">{syncNote}</div>}
           <div className="text-[11px] text-label flex items-center gap-1">
             <Icon name="schedule" size={12} /> Last synced {timeAgo(connection.lastSyncedAt)}
           </div>
+          {mapping && <AsanaFieldMapping onClose={() => setMapping(false)} />}
         </div>
       )}
     </Card>

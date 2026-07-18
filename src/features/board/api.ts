@@ -27,10 +27,11 @@ interface ItemRow {
   plan_bucket: string | null;
   created_at: string | null;
   assignee: { name: string } | null;
+  external_assignee_name: string | null;
 }
 
 const ITEM_SELECT =
-  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, external_assignee_name, assignee:profiles!backlog_items_assignee_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const { data, error } = await supabase
@@ -45,8 +46,11 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     type: r.type,
     boardStatus: r.board_status,
     priority: r.priority,
-    assigneeName: r.assignee?.name,
-    assigneeInitials: initials(r.assignee?.name),
+    // Falls back to the Asana assignee's name when no workspace member's
+    // email matched — keeps the owner visible instead of silently dropping
+    // it, even though there's no local profile to link to.
+    assigneeName: r.assignee?.name ?? r.external_assignee_name ?? undefined,
+    assigneeInitials: initials(r.assignee?.name ?? r.external_assignee_name),
     ...(r.source_request_id ? { sourceRequestId: r.source_request_id } : {}),
     ...(r.rice_score != null ? { riceScore: Number(r.rice_score) } : {}),
     ...(r.wsjf_score != null ? { wsjfScore: Number(r.wsjf_score) } : {}),

@@ -119,3 +119,19 @@ export async function asanaFetchAllPages<T>(accessToken: string, path: string): 
     url = `${ASANA_API_BASE}${path}${sep}offset=${body.next_page.offset}`;
   }
 }
+
+/** Runs fn over items with at most `limit` in flight — comments need one
+ * API call per task, and firing them all at once risks Asana's rate limits
+ * on any project with more than a handful of tasks. */
+export async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}

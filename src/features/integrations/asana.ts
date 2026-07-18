@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { queryClient } from '@/lib/queryClient';
+import { useAuth } from '@/features/auth/AuthProvider';
 
 export interface AsanaConnection {
   connected: boolean;
@@ -15,6 +16,25 @@ export interface AsanaProjectGroup {
   gid: string;
   name: string;
   projects: { gid: string; name: string }[];
+}
+
+/** A mappable Asana source — the project's sections (always present, used
+ * for status) or one of its enum/multi_enum custom fields. Discovered live
+ * from the connected project, never hardcoded, so a field added in Asana
+ * later just shows up here with no ProductHub code change. */
+export interface AsanaField {
+  sourceField: string;
+  label: string;
+  options: string[];
+}
+
+export type MappingTarget = 'board_status' | 'priority' | 'type' | 'ignore';
+
+export interface FieldMapping {
+  sourceField: string;
+  sourceLabel: string;
+  targetField: MappingTarget;
+  valueMap: Record<string, string>;
 }
 
 const NOT_CONNECTED: AsanaConnection = {
@@ -174,6 +194,66 @@ export function useAsanaProjects() {
   return { groups: q.data?.workspaces ?? [], isLoading: q.isFetching, load: q.refetch };
 }
 
+/** The connected project's mappable fields — sections + custom fields.
+ * Fetched on demand (opening the mapping panel), not on every render. */
+export function useAsanaFields() {
+  const q = useQuery({
+    queryKey: ['integration', 'asana', 'fields'],
+    enabled: false,
+    queryFn: () => invoke<{ fields: AsanaField[] }>('asana-fields', {}),
+  });
+  return { fields: q.data?.fields ?? [], isLoading: q.isFetching, load: q.refetch };
+}
+
+export function useFieldMappings(): { mappings: FieldMapping[]; isLoading: boolean } {
+  const q = useQuery({
+    queryKey: ['integration', 'asana', 'mappings'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<FieldMapping[]> => {
+      const { data, error } = await supabase
+        .from('integration_field_mappings')
+        .select('source_field, source_label, target_field, value_map')
+        .eq('provider', 'asana');
+      if (error) throw error;
+      return (data as { source_field: string; source_label: string; target_field: MappingTarget; value_map: Record<string, string> }[]).map(
+        (r) => ({ sourceField: r.source_field, sourceLabel: r.source_label, targetField: r.target_field, valueMap: r.value_map }),
+      );
+    },
+  });
+  if (!isSupabaseConfigured) return { mappings: [], isLoading: false };
+  return { mappings: q.data ?? [], isLoading: q.isLoading };
+}
+
+export function useFieldMappingActions() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['integration', 'asana', 'mappings'] });
+
+  return {
+    async save(field: AsanaField, targetField: MappingTarget, valueMap: Record<string, string>) {
+      if (!user) throw new Error('Not signed in.');
+      const { error } = await supabase.from('integration_field_mappings').upsert(
+        {
+          workspace_id: user.workspaceId,
+          provider: 'asana',
+          source_field: field.sourceField,
+          source_label: field.label,
+          target_field: targetField,
+          value_map: valueMap,
+        },
+        { onConflict: 'workspace_id,provider,source_field' },
+      );
+      if (error) throw error;
+      await invalidate();
+    },
+    async remove(sourceField: string) {
+      const { error } = await supabase.from('integration_field_mappings').delete().eq('provider', 'asana').eq('source_field', sourceField);
+      if (error) throw error;
+      await invalidate();
+    },
+  };
+}
+
 export function useAsanaActions() {
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ['integration', 'asana'] });
@@ -192,8 +272,8 @@ export function useAsanaActions() {
       if (error) throw error;
       await invalidate();
     },
-    async sync(): Promise<{ imported: number; total: number }> {
-      const result = await invoke<{ imported: number; total: number }>('asana-sync', {});
+    async sync(): Promise<{ imported: number; total: number; commentsImported: number }> {
+      const result = await invoke<{ imported: number; total: number; commentsImported: number }>('asana-sync', {});
       await invalidate();
       await qc.invalidateQueries({ queryKey: ['board'] });
       return result;
