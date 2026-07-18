@@ -35,3 +35,28 @@ export async function requireManager(
   if (error || !data || data.role !== 'manager') return null;
   return { id: data.id, workspaceId: data.workspace_id, role: data.role };
 }
+
+export interface CallerOrg {
+  id: string;
+  name: string;
+  plan: string;
+  stripeCustomerId: string | null;
+}
+
+/** The Manager's org — billing lives at the org level (one subscription
+ * covers every workspace under it), not the workspace level. */
+export async function getOrgForWorkspace(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  workspaceId: string,
+): Promise<CallerOrg | null> {
+  const { data: ws, error: wsError } = await supabase.from('workspaces').select('org_id').eq('id', workspaceId).maybeSingle();
+  if (wsError || !ws) return null;
+  const { data: org, error: orgError } = await supabase
+    .from('orgs')
+    .select('id, name, plan, stripe_customer_id')
+    .eq('id', ws.org_id)
+    .maybeSingle();
+  if (orgError || !org) return null;
+  return { id: org.id, name: org.name, plan: org.plan, stripeCustomerId: org.stripe_customer_id };
+}

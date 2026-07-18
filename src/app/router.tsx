@@ -32,6 +32,7 @@ import { SwimlanesScreen } from '@/screens/pm/SwimlanesScreen';
 import { SLABreachesScreen } from '@/screens/manager/SLABreachesScreen';
 import { TeamPerformanceScreen } from '@/screens/manager/TeamPerformanceScreen';
 import { CustomersScreen } from '@/screens/manager/CustomersScreen';
+import { BillingScreen } from '@/screens/manager/BillingScreen';
 import { ReportsScreen } from '@/screens/manager/ReportsScreen';
 import { RoleDashboard } from '@/screens/RoleDashboard';
 import { AnalyticsHome } from '@/screens/analytics/AnalyticsHome';
@@ -118,6 +119,7 @@ export const router = createHashRouter([
               { path: '/sla-breaches', element: <SLABreachesScreen /> },
               { path: '/team', element: <TeamPerformanceScreen /> },
               { path: '/customers', element: <CustomersScreen /> },
+              { path: '/billing', element: <BillingScreen /> },
               { path: '/reports', element: <ReportsScreen /> },
               { path: '/pm/roadmap', element: <RoadmapScreen /> },
               { path: '/pm/releases', element: <ReleaseTreeScreen /> },

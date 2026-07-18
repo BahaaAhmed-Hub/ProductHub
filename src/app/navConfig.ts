@@ -75,7 +75,6 @@ export const NAV: Record<Role, NavSection[]> = {
       items: [
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
         { label: 'SLA Breaches', icon: 'error', path: '/sla-breaches' },
-        { label: 'Team & Members', icon: 'groups', path: '/team' },
         { label: 'Customers', icon: 'apartment', path: '/customers' },
         { label: 'Reports', icon: 'summarize', path: '/reports' },
       ],
@@ -98,6 +97,13 @@ export const NAV: Record<Role, NavSection[]> = {
         { label: 'Analytics', icon: 'insights', path: '/analytics' },
         { label: 'Research', icon: 'science', path: '/research' },
         { label: 'Prioritization', icon: 'tune', path: '/prioritize' },
+      ],
+    },
+    {
+      title: 'Settings',
+      items: [
+        { label: 'Billing', icon: 'credit_card', path: '/billing' },
+        { label: 'Team & Members', icon: 'groups', path: '/team' },
         { label: 'Integrations', icon: 'extension', path: '/integrations' },
       ],
     },
