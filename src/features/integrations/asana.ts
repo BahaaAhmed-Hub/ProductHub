@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export interface AsanaConnection {
@@ -30,7 +31,23 @@ const RETURNED_STATE_KEY = 'ph.asanaOAuthState';
 
 async function invoke<T>(fn: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(fn, { body });
-  if (error) throw error;
+  if (error) {
+    // On a non-2xx response, supabase-js discards the function's own JSON
+    // body and replaces error.message with a generic "non-2xx status code"
+    // string — the real { error: "..." } payload is only reachable via
+    // error.context (the raw Response). Without this, every server-side
+    // error message (missing secrets, permission checks, Asana API errors)
+    // gets flattened into that one useless string.
+    if (error instanceof FunctionsHttpError) {
+      const bodyMessage = await error.context
+        .clone()
+        .json()
+        .then((b: { error?: string }) => b?.error)
+        .catch(() => undefined);
+      if (bodyMessage) throw new Error(bodyMessage);
+    }
+    throw error;
+  }
   if (data?.error) throw new Error(data.error);
   return data as T;
 }
