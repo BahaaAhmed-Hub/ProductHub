@@ -63,4 +63,4 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy --project-ref "$PROJECT_REF"
 
-# trigger: deploy functions (secrets now set)
+# trigger: redeploy to pick up ASANA_CLIENT_ID/ASANA_CLIENT_SECRET
