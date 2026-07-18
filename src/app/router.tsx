@@ -7,6 +7,7 @@ import { RoleIndex } from '@/features/auth/RoleIndex';
 import { SignInScreen } from '@/screens/customer/SignInScreen';
 import { SignupScreen } from '@/screens/customer/SignupScreen';
 import { JoinScreen } from '@/screens/customer/JoinScreen';
+import { AcceptInviteScreen } from '@/screens/customer/AcceptInviteScreen';
 import { SubmitRequestScreen } from '@/screens/customer/SubmitRequestScreen';
 import { ConfirmationScreen } from '@/screens/customer/ConfirmationScreen';
 import { MyRequestsScreen } from '@/screens/customer/MyRequestsScreen';
@@ -51,6 +52,7 @@ export const router = createHashRouter([
   { path: '/signup', element: <SignupScreen /> },
   { path: '/join', element: <JoinScreen /> },
   { path: '/join/:slug', element: <JoinScreen /> },
+  { path: '/accept-invite', element: <AcceptInviteScreen /> },
   { path: '/plans', element: <PlansScreen /> },
   {
     element: <RequireAuth />,

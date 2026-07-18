@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { invoke } from '@/lib/edgeFunctions';
 import type { Role } from '@/types/domain';
 
 export interface PendingMember {
@@ -15,8 +16,12 @@ export interface Member {
   name: string;
   email: string;
   role: Role;
-  status: 'active' | 'pending';
+  // 'active': normal member. 'pending': domain signup awaiting a manager's
+  // approve/decline. 'invited': manager sent a direct email invite and the
+  // person hasn't set a password + signed in yet.
+  status: 'active' | 'pending' | 'invited';
   isSelf: boolean;
+  invitedAt?: string;
 }
 
 export interface Invite {
@@ -55,13 +60,14 @@ export function useTeamMembers(): { members: Member[]; isLoading: boolean } {
     queryFn: async (): Promise<Member[]> => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name, email, role, status')
+        .select('id, name, email, role, status, invited_at')
         .order('name');
       if (error) throw error;
-      return (data as { id: string; name: string; email: string; role: Role; status: 'active' | 'pending' | null }[]).map((p) => ({
+      return (data as { id: string; name: string; email: string; role: Role; status: Member['status'] | null; invited_at: string | null }[]).map((p) => ({
         id: p.id, name: p.name, email: p.email, role: p.role,
         status: p.status ?? 'active',
         isSelf: p.id === user?.id,
+        ...(p.invited_at ? { invitedAt: p.invited_at } : {}),
       }));
     },
   });
@@ -139,6 +145,24 @@ export function useInviteActions() {
       const { error } = await supabase.from('workspace_invites').update({ revoked: true }).eq('id', id);
       if (error) throw error;
       await qc.invalidateQueries({ queryKey: ['invites'] });
+    },
+  };
+}
+
+/** Direct email invite: manager types an email + role, the invite-member
+ * Edge Function creates an unconfirmed auth user (service role) and emails
+ * them a "set your password" link. The same call resends the invite for an
+ * already-invited (still unconfirmed) email — Supabase's admin invite API
+ * treats a second call for an unconfirmed user as a resend rather than an
+ * error, so "Invite" and "Resend" both go through this one function. */
+export function useInviteMemberActions() {
+  const qc = useQueryClient();
+  return {
+    async invite(email: string, role: Role): Promise<void> {
+      if (!isSupabaseConfigured) throw new Error('Inviting members requires a configured Supabase project.');
+      const redirectTo = `${window.location.origin}${window.location.pathname}#/accept-invite`;
+      await invoke('invite-member', { email, role, redirectTo });
+      await qc.invalidateQueries({ queryKey: ['team'] });
     },
   };
 }

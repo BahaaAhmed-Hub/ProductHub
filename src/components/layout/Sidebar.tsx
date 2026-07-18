@@ -5,9 +5,11 @@ import { NAV } from '@/app/navConfig';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { useSettingsModalStore } from '@/features/settings/store';
 
 export function Sidebar() {
   const { user, signOut } = useAuth();
+  const openSettings = useSettingsModalStore((s) => s.openModal);
   const sections = user ? NAV[user.role] : [];
   // Collapsed-section titles; a section stays expanded the first time it's
   // seen (default open) unless the user explicitly collapses it. Sections
@@ -27,8 +29,12 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-[196px] flex-shrink-0 bg-surface border-r-[0.5px] border-hairline flex flex-col justify-between py-3.5 px-2.5">
-      <div className="flex flex-col gap-4">
+    <aside className="w-[196px] flex-shrink-0 bg-surface border-r-[0.5px] border-hairline flex flex-col py-3.5 px-2.5 overflow-hidden">
+      {/* Scrolls independently of the footer below — with every section
+          expanded, nav content can exceed the sidebar's height; without a
+          dedicated scroll container here, it simply overflowed past the
+          viewport and pushed the footer out of view. */}
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin flex flex-col gap-4">
         {/* Brand */}
         <div className="flex items-center gap-2.5 px-2">
           <div className="w-[60px] h-[60px] rounded-xl bg-navy text-white text-2xl font-bold flex items-center justify-center flex-shrink-0">
@@ -90,14 +96,24 @@ export function Sidebar() {
         })}
       </div>
 
-      {/* User footer */}
-      <div className="border-t-[0.5px] border-hairline pt-2.5 flex items-center gap-2">
-        <Avatar initials={user.initials} tone="accent" />
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium leading-tight truncate">{user.name}</div>
-          <div className="text-[11px] text-label capitalize">{user.role}</div>
-        </div>
-        <button onClick={signOut} title="Sign out" className="text-label hover:text-body">
+      {/* User footer — pinned outside the scroll area. Clicking the account
+          block opens Settings (Billing/Team/Integrations) for managers,
+          who no longer have those as separate sidebar nav items. */}
+      <div className="flex-shrink-0 border-t-[0.5px] border-hairline pt-2.5 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => user.role === 'manager' && openSettings()}
+          disabled={user.role !== 'manager'}
+          className="flex-1 min-w-0 flex items-center gap-2 text-left disabled:cursor-default"
+          title={user.role === 'manager' ? 'Account settings' : undefined}
+        >
+          <Avatar initials={user.initials} tone="accent" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-medium leading-tight truncate">{user.name}</div>
+            <div className="text-[11px] text-label capitalize">{user.role}</div>
+          </div>
+        </button>
+        <button onClick={signOut} title="Sign out" className="text-label hover:text-body flex-shrink-0">
           <Icon name="logout" size={18} />
         </button>
       </div>

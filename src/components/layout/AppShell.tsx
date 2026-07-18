@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { SettingsModal } from './SettingsModal';
 import { Icon } from '@/components/ui/Icon';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { ItemDetailPanel } from '@/components/board/ItemDetailPanel';
@@ -33,6 +34,7 @@ export function AppShell() {
       </main>
       <ItemDetailPanel />
       <AsanaOAuthGate />
+      <SettingsModal />
     </div>
   );
 }

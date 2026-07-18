@@ -23,8 +23,12 @@ function formatDate(iso?: string): string {
 /** Settings → Billing: current plan/status (read live from Stripe — see
  * stripe-status), plan selection via Checkout, and "Manage billing" for
  * everything else (payment method, invoice history + PDF downloads, plan
- * changes, cancellation) via Stripe's hosted Billing Portal. */
-export function BillingScreen() {
+ * changes, cancellation) via Stripe's hosted Billing Portal.
+ *
+ * Split into `BillingContent` (the actual UI) and `BillingScreen` (adds the
+ * routed page's own TopNav) so the same content can also render inside the
+ * Settings popup without a duplicate TopNav. */
+export function BillingContent() {
   const { billing, isLoading } = useBillingStatus();
   const actions = useBillingActions();
   const [params, setParams] = useSearchParams();
@@ -68,8 +72,6 @@ export function BillingScreen() {
 
   return (
     <>
-      <TopNav center={<span className="text-[13px] text-body">Billing</span>} notificationCount={4} />
-      <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
         <h1 className="text-lg font-semibold tracking-tight">Billing & subscription</h1>
         <p className="text-xs text-label mt-0.5 mb-5">Manage your plan, payment method, and invoices.</p>
 
@@ -137,6 +139,17 @@ export function BillingScreen() {
             );
           })}
         </div>
+    </>
+  );
+}
+
+/** Routed page (/billing): BillingContent plus its own TopNav. */
+export function BillingScreen() {
+  return (
+    <>
+      <TopNav center={<span className="text-[13px] text-body">Billing</span>} notificationCount={4} />
+      <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
+        <BillingContent />
       </div>
     </>
   );

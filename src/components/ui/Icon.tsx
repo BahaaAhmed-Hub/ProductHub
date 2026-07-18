@@ -6,6 +6,7 @@ import {
   FlaskConical, Search, Repeat, ScrollText, SlidersHorizontal, TrendingUp,
   TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight, Copy,
   Link2, Rocket, Building2, HourglassIcon, CircleCheck, CreditCard,
+  Settings, Mail, Send,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -68,6 +69,9 @@ const MAP: Record<string, LucideIcon> = {
   hourglass_top: HourglassIcon,
   check_circle: CircleCheck,
   credit_card: CreditCard,
+  settings: Settings,
+  mail: Mail,
+  send: Send,
 };
 
 interface IconProps {

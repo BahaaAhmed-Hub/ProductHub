@@ -199,17 +199,17 @@ function AsanaCard() {
   );
 }
 
-/** Screen 35/38 — PM integrations list. Asana is wired to the real backend
- * (OAuth connect + manual import); the rest remain UI-only placeholders. */
-export function IntegrationsScreen() {
+/** Integrations list content — Asana is wired to the real backend (OAuth
+ * connect + manual import); the rest remain UI-only placeholders. Split
+ * from `IntegrationsScreen` so the Settings popup can render it without a
+ * duplicate TopNav. */
+export function IntegrationsContent() {
   const [items, setItems] = useState(MOCK);
   const toggle = (k: string) =>
     setItems((xs) => xs.map((x) => (x.key === k ? { ...x, connected: !x.connected } : x)));
 
   return (
     <>
-      <TopNav center={<span className="text-[13px] text-body">Integrations</span>} notificationCount={4} />
-      <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
         <h1 className="text-lg font-semibold tracking-tight">Integrations</h1>
         <p className="text-xs text-label mt-0.5 mb-5">Connect the tools your team already uses.</p>
 
@@ -243,6 +243,17 @@ export function IntegrationsScreen() {
             </Card>
           ))}
         </div>
+    </>
+  );
+}
+
+/** Routed page (/integrations): IntegrationsContent plus its own TopNav. */
+export function IntegrationsScreen() {
+  return (
+    <>
+      <TopNav center={<span className="text-[13px] text-body">Integrations</span>} notificationCount={4} />
+      <div className="flex-1 bg-canvas overflow-y-auto scroll-thin p-6">
+        <IntegrationsContent />
       </div>
     </>
   );

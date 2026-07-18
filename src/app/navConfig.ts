@@ -99,14 +99,10 @@ export const NAV: Record<Role, NavSection[]> = {
         { label: 'Prioritization', icon: 'tune', path: '/prioritize' },
       ],
     },
-    {
-      title: 'Settings',
-      items: [
-        { label: 'Billing', icon: 'credit_card', path: '/billing' },
-        { label: 'Team & Members', icon: 'groups', path: '/team' },
-        { label: 'Integrations', icon: 'extension', path: '/integrations' },
-      ],
-    },
+    // Billing / Team & Members / Integrations moved to the Settings popup
+    // (Sidebar footer or TopNav profile menu) — see SettingsModal. The
+    // routes themselves (/billing, /team, /integrations) still exist for
+    // direct links; they're just no longer permanent nav items.
   ],
   stakeholder: [
     { items: [{ label: 'Roadmap', icon: 'map', path: '/viewer' }] },

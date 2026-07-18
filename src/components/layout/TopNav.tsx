@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { useNotifications, useMarkAllRead } from '@/features/notifications';
+import { useSettingsModalStore } from '@/features/settings/store';
 
 interface TopNavProps {
   center?: ReactNode;
@@ -21,6 +22,7 @@ export function TopNav({ center, actions }: TopNavProps) {
   const navigate = useNavigate();
   const { notes, unread } = useNotifications();
   const markAll = useMarkAllRead();
+  const openSettings = useSettingsModalStore((s) => s.openModal);
   const [open, setOpen] = useState<null | 'bell' | 'profile'>(null);
 
   async function onSignOut() {
@@ -102,6 +104,14 @@ export function TopNav({ center, actions }: TopNavProps) {
                     {ROLE_LABEL[user.role] ?? user.role}
                   </div>
                 </div>
+                {user.role === 'manager' && (
+                  <button
+                    onClick={() => { setOpen(null); openSettings(); }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-[13px] text-body hover:bg-[#F4F3F0] border-b-[0.5px] border-hairline"
+                  >
+                    <Icon name="settings" size={16} /> Account settings
+                  </button>
+                )}
                 <button
                   onClick={onSignOut}
                   className="w-full flex items-center gap-2 px-3 py-2.5 text-[13px] text-body hover:bg-[#F4F3F0]"
