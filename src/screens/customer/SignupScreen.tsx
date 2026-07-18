@@ -7,17 +7,20 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { checkSignupDomain, type SignupBranch } from '@/features/auth/domainCheck';
 import type { Role } from '@/types/domain';
 
-type Step = 'method' | 'details' | 'role' | 'outcome';
+type Step = 'kind' | 'method' | 'details' | 'role' | 'outcome';
 
 /** Staff signup wizard — Screens 01a–01f of the FlowDesk spec.
- * Domain-based branching decides the outcome before the account exists:
- * personal domain / first-from-domain both auto-assign Manager; a domain
- * with an existing Manager routes through a PM/Developer choice + approval. */
+ * First asks the one question that decides everything else: a customer
+ * (has a join code from their provider, never picks a role, never waits on
+ * approval) or staff at a provider (domain-based branching decides the
+ * outcome before the account exists — personal domain / first-from-domain
+ * both auto-assign Manager; a domain with an existing Manager routes
+ * through a PM/Developer choice + approval). */
 export function SignupScreen() {
   const { signUp, signInWithGoogle, updateRequestedRole, mockMode } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>('method');
+  const [step, setStep] = useState<Step>('kind');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,6 +82,41 @@ export function SignupScreen() {
     }
   }
 
+  if (step === 'kind') {
+    return (
+      <AuthShell>
+        <h1 className="text-xl font-semibold tracking-tight">Create your account</h1>
+        <p className="text-sm text-body mt-1">First, what brings you to ProductHub?</p>
+
+        <div className="mt-6 flex flex-col gap-2.5">
+          <button
+            type="button"
+            onClick={() => navigate('/join')}
+            className="flex flex-col gap-0.5 px-4 py-3.5 rounded-control border-[0.5px] border-hairline text-left hover:border-accent hover:bg-accent-bg"
+          >
+            <span className="text-[13px] font-medium">I'm a customer</span>
+            <span className="text-[11px] text-label">I have a join code or link from my provider</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep('method')}
+            className="flex flex-col gap-0.5 px-4 py-3.5 rounded-control border-[0.5px] border-hairline text-left hover:border-accent hover:bg-accent-bg"
+          >
+            <span className="text-[13px] font-medium">I'm on a provider's team</span>
+            <span className="text-[11px] text-label">Set up or join your company's workspace</span>
+          </button>
+        </div>
+
+        <p className="mt-5 text-[12px] text-body text-center">
+          Already have an account?{' '}
+          <button className="text-accent font-medium" onClick={() => navigate('/signin')}>
+            Sign in
+          </button>
+        </p>
+      </AuthShell>
+    );
+  }
+
   if (step === 'method') {
     return (
       <AuthShell>
@@ -105,18 +143,9 @@ export function SignupScreen() {
           </Button>
         </div>
 
-        <p className="mt-5 text-[12px] text-body text-center">
-          Already have an account?{' '}
-          <button className="text-accent font-medium" onClick={() => navigate('/signin')}>
-            Sign in
-          </button>
-        </p>
-        <p className="mt-2 text-[12px] text-body text-center">
-          Joining as a customer?{' '}
-          <button className="text-accent font-medium" onClick={() => navigate('/join')}>
-            Use a join code
-          </button>
-        </p>
+        <button type="button" className="mt-5 text-[12px] text-body block mx-auto" onClick={() => setStep('kind')}>
+          ← Back
+        </button>
       </AuthShell>
     );
   }

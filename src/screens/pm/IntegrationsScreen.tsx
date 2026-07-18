@@ -101,7 +101,7 @@ function AsanaCard() {
   }
 
   return (
-    <Card className="p-5 flex flex-col gap-3 col-span-2">
+    <Card className="p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between">
         <div className="w-11 h-11 rounded-[12px] bg-[#F2F1EE] flex items-center justify-center text-xl">🅰️</div>
         {connection.connected && <Tag tone="success">Connected</Tag>}
@@ -213,7 +213,7 @@ export function IntegrationsScreen() {
         <h1 className="text-lg font-semibold tracking-tight">Integrations</h1>
         <p className="text-xs text-label mt-0.5 mb-5">Connect the tools your team already uses.</p>
 
-        <div className="grid grid-cols-2 gap-4 max-w-3xl">
+        <div className="flex flex-col gap-4 max-w-3xl">
           <AsanaCard />
           {items.map((it) => (
             <Card key={it.key} className="p-5 flex flex-col gap-3">

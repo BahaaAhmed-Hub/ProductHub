@@ -161,20 +161,12 @@ export function SignInScreen() {
       </form>
 
       {!isInvitedSignup && (
-        <>
-          <p className="mt-5 text-[12px] text-body text-center">
-            New to ProductHub?{' '}
-            <button className="text-accent font-medium" onClick={() => navigate('/signup')}>
-              Create an account
-            </button>
-          </p>
-          <p className="mt-2 text-[12px] text-body text-center">
-            Have a join code?{' '}
-            <button className="text-accent font-medium" onClick={() => navigate('/join')}>
-              Join a workspace
-            </button>
-          </p>
-        </>
+        <p className="mt-5 text-[12px] text-body text-center">
+          New to ProductHub?{' '}
+          <button className="text-accent font-medium" onClick={() => navigate('/signup')}>
+            Create an account
+          </button>
+        </p>
       )}
 
       {mockMode && (
