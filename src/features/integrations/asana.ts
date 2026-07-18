@@ -25,7 +25,10 @@ const NOT_CONNECTED: AsanaConnection = {
   lastSyncedAt: null,
 };
 
-const REDIRECT_URI = () => window.location.href.split('#')[0];
+/** Exported so the UI can display the exact value being sent — Asana's
+ * "redirect_uri does not match" error never echoes back what was sent, so
+ * without this the only way to debug a mismatch is guessing. */
+export const REDIRECT_URI = () => window.location.href.split('#')[0];
 const EXPECTED_STATE_KEY = 'ph.asanaOAuthExpectedState';
 const RETURNED_CODE_KEY = 'ph.asanaOAuthCode';
 const RETURNED_STATE_KEY = 'ph.asanaOAuthState';

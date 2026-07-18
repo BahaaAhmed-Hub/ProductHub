@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Tag';
 import { Icon } from '@/components/ui/Icon';
 import {
-  connectAsana, useAsanaConnection, useAsanaProjects, useAsanaActions,
+  connectAsana, useAsanaConnection, useAsanaProjects, useAsanaActions, REDIRECT_URI,
   type AsanaProjectGroup,
 } from '@/features/integrations/asana';
 
@@ -118,7 +118,15 @@ function AsanaCard() {
       {isLoading ? (
         <div className="text-[12px] text-label">Loading…</div>
       ) : !connection.connected ? (
-        <Button icon="add" onClick={onConnect}>Connect Asana</Button>
+        <div className="flex flex-col gap-2">
+          <Button icon="add" onClick={onConnect}>Connect Asana</Button>
+          <div className="text-[10px] text-label leading-relaxed">
+            Asana app's OAuth redirect URL must be registered as exactly:
+            <code className="block mt-0.5 px-1.5 py-1 rounded bg-[#F4F3F0] text-[10px] font-mono break-all select-all">
+              {REDIRECT_URI()}
+            </code>
+          </div>
+        </div>
       ) : !connection.externalProjectGid ? (
         <div className="flex flex-col gap-2">
           <Button variant="secondary" icon="tune" onClick={onOpenPicker} disabled={picking && projectsLoading}>
