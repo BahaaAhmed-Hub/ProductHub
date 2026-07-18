@@ -24,6 +24,7 @@ const COLMAP: Record<string, string> = {
   customerName: 'customer_name',
   module: 'module',
   tags: 'tags',
+  createdAt: 'created_at',
 };
 
 export function useBoardItems(): { items: BoardItem[]; isLoading: boolean } {
@@ -111,7 +112,7 @@ export function useBulkActions() {
         await invalidate();
         return;
       }
-      mockAssign(ids, assignee ? { name: assignee.name, initials: assignee.initials } : null);
+      mockAssign(ids, assignee);
     },
   };
 }

@@ -16,7 +16,7 @@ interface BoardState {
   patch: (id: string, fields: Partial<BoardItem>) => void;
   addNote: (itemId: string, note: ItemNote) => void;
   deleteItems: (ids: string[]) => void;
-  bulkAssign: (ids: string[], assignee: { name: string; initials: string } | null) => void;
+  bulkAssign: (ids: string[], assignee: { id: string; name: string; initials: string } | null) => void;
 }
 
 export const useBoardStore = create<BoardState>((set) => ({
@@ -69,7 +69,9 @@ export const useBoardStore = create<BoardState>((set) => ({
       const pick = new Set(ids);
       return {
         items: s.items.map((i) =>
-          pick.has(i.id) ? { ...i, assigneeName: assignee?.name, assigneeInitials: assignee?.initials } : i,
+          pick.has(i.id)
+            ? { ...i, assigneeId: assignee?.id, assigneeName: assignee?.name, assigneeInitials: assignee?.initials }
+            : i,
         ),
       };
     }),

@@ -7,16 +7,13 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Segmented } from '@/components/ui/Segmented';
 import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
 import { BOARD_COLUMNS } from '@/features/board/types';
-import { useBoardItems, useUpdateRice, useMoveItem, useBulkActions } from '@/features/board/hooks';
+import { useBoardItems, useMoveItem, useBulkActions } from '@/features/board/hooks';
 import { useItemPanel } from '@/features/board/panelStore';
 import { NewItemDialog } from '@/components/board/NewItemDialog';
-import { useTeamMembers } from '@/features/team';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { RicePopover } from '@/components/board/RicePopover';
+import { useAssigneeRoster } from '@/features/team';
 import type { BoardItem } from '@/features/board/types';
 import type { BoardStatus } from '@/types/domain';
-
-const IMPACT = { Minimal: 0.5, Moderate: 1, Massive: 2 } as const;
-type ImpactKey = keyof typeof IMPACT;
 
 const PLAN_TONE: Record<string, 'neutral' | 'accent' | 'success'> = {
   backlog: 'neutral',
@@ -205,17 +202,7 @@ function AssigneePicker({
   onPick: (assignee: { id: string; name: string; initials: string } | null) => void;
   onClose: () => void;
 }) {
-  const { members } = useTeamMembers();
-  // Mock mode has no real profiles to assign — offer the fixture roster
-  // that already appears on mock backlog items, so the flow stays walkable.
-  const mockRoster = [
-    { id: 'mock-ar', name: 'Amir R.', initials: 'AR' },
-    { id: 'mock-sk', name: 'Sara K.', initials: 'SK' },
-    { id: 'mock-dr', name: 'Devon R.', initials: 'DR' },
-  ];
-  const roster = isSupabaseConfigured
-    ? members.filter((m) => m.status === 'active').map((m) => ({ id: m.id, name: m.name, initials: initialsOf(m.name) }))
-    : mockRoster;
+  const roster = useAssigneeRoster();
 
   return (
     <>
@@ -242,10 +229,6 @@ function AssigneePicker({
       </div>
     </>
   );
-}
-
-function initialsOf(name: string): string {
-  return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 }
 
 function ListView({
@@ -375,90 +358,3 @@ function BoardView({ items, onOpen }: { items: BoardItem[]; onOpen: (id: string)
   );
 }
 
-function RicePopover({ item, onClose }: { item: BoardItem; onClose: () => void }) {
-  const updateRice = useUpdateRice();
-  const [reach, setReach] = useState(48);
-  const [impact, setImpact] = useState<ImpactKey>('Massive');
-  const [confidence, setConfidence] = useState(88);
-  const [effort, setEffort] = useState(5);
-  const [saving, setSaving] = useState(false);
-
-  const score = effort > 0 ? (reach * IMPACT[impact] * (confidence / 100)) / effort : 0;
-
-  async function save() {
-    setSaving(true);
-    try {
-      await updateRice(item.id, Number(score.toFixed(1)));
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="absolute right-2 top-11 z-40 w-[300px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop p-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[13px] font-semibold">
-          RICE Score · <span className="font-mono">{item.ref}</span>
-        </span>
-        <button onClick={onClose} className="text-label hover:text-body">
-          <Icon name="close" size={15} />
-        </button>
-      </div>
-
-      <label className="flex items-center justify-between text-[12px] mb-2.5">
-        <span className="text-body">Reach /mo</span>
-        <input
-          type="number"
-          value={reach}
-          onChange={(e) => setReach(Number(e.target.value))}
-          className="w-16 h-7 px-2 rounded-md border-[0.5px] border-hairline text-right outline-none focus:border-accent"
-        />
-      </label>
-
-      <div className="text-[12px] text-body mb-1">Impact</div>
-      <div className="mb-2.5">
-        <Segmented
-          value={impact}
-          onChange={setImpact}
-          options={(Object.keys(IMPACT) as ImpactKey[]).map((k) => ({ value: k, label: k }))}
-        />
-      </div>
-
-      <label className="block text-[12px] mb-2.5">
-        <div className="flex items-center justify-between text-body mb-1">
-          <span>Confidence</span>
-          <span className="font-mono">{confidence}%</span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={confidence}
-          onChange={(e) => setConfidence(Number(e.target.value))}
-          className="w-full accent-pm"
-        />
-      </label>
-
-      <label className="flex items-center justify-between text-[12px] mb-3">
-        <span className="text-body">Effort /pts</span>
-        <input
-          type="number"
-          value={effort}
-          onChange={(e) => setEffort(Number(e.target.value))}
-          className="w-16 h-7 px-2 rounded-md border-[0.5px] border-hairline text-right outline-none focus:border-accent"
-        />
-      </label>
-
-      <div className="text-[10px] text-label mb-1">(Reach × Impact × Conf) ÷ Effort</div>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-eyebrow uppercase text-label">Score</span>
-        <span className="text-2xl font-semibold text-pm">{score.toFixed(1)}</span>
-      </div>
-
-      <Button className="w-full" disabled={saving} onClick={save}>
-        {saving ? 'Saving…' : 'Save score'}
-      </Button>
-    </div>
-  );
-}

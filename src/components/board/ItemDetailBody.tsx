@@ -3,10 +3,13 @@ import clsx from 'clsx';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/components/ui/Avatar';
 import { Eyebrow } from '@/components/ui/Card';
-import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
+import { Tag, PriorityTag } from '@/components/ui/Tag';
 import { Segmented } from '@/components/ui/Segmented';
-import { useBoardItems, useItemNotes, useAddNote, useMoveItem, useUpdateItem } from '@/features/board/hooks';
+import { useBoardItems, useItemNotes, useAddNote, useMoveItem, useUpdateItem, useBulkActions } from '@/features/board/hooks';
+import { RicePopover } from '@/components/board/RicePopover';
+import { useAssigneeRoster } from '@/features/team';
 import type { BoardItem, ItemNote } from '@/features/board/types';
+import type { RequestType } from '@/types/domain';
 
 /**
  * Shared item-detail content — used by the Asana-style slide-over panel
@@ -77,13 +80,10 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
           )}
         </div>
 
-        {/* Meta grid */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-5 bg-canvas border-[0.5px] border-hairline rounded-frame p-4">
-          <Meta label="Type" value={<TypeTag type={item.type} />} />
-          <Meta label="Assignee" value={item.assigneeName ?? 'Unassigned'} />
-          <Meta label="Created" value={item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'} />
-          <Meta label="RICE" value={item.riceScore != null ? item.riceScore.toFixed(1) : '—'} />
-        </div>
+        {/* Primary fields — every one editable in place: Type/Priority as
+            dropdowns, Assignee from the team roster, Created as a date,
+            RICE opens the same scoring popover as the Backlog list. */}
+        <PrimaryFields key={item.id} item={item} />
 
         {/* Default task fields — available on every item regardless of
             source, editable inline. */}
@@ -160,6 +160,79 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
 
 const fieldInputClass =
   'w-full text-[13px] bg-transparent outline-none border-b-[0.5px] border-transparent hover:border-hairline focus:border-accent pb-0.5';
+
+const TYPE_OPTIONS: { value: RequestType; label: string }[] = [
+  { value: 'bug', label: 'Bug' },
+  { value: 'feature', label: 'Feature' },
+  { value: 'query', label: 'Query' },
+  { value: 'request', label: 'Request' },
+];
+
+/** Type, Assignee, Created, RICE — the fields that used to be a read-only
+ * grid at the top of the panel. Type/Assignee are dropdowns, Created is a
+ * date input, and RICE opens the same scoring popover the Backlog list
+ * uses (positioned to hang from the left since this panel sits at the
+ * right edge of the screen). */
+function PrimaryFields({ item }: { item: BoardItem }) {
+  const updateItem = useUpdateItem();
+  const { assign } = useBulkActions();
+  const roster = useAssigneeRoster();
+  const [showRice, setShowRice] = useState(false);
+
+  function onAssigneeChange(id: string) {
+    const person = id ? roster.find((r) => r.id === id) ?? null : null;
+    assign([item.id], person);
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-4 bg-canvas border-[0.5px] border-hairline rounded-frame p-4">
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Type</Eyebrow>
+        <select
+          value={item.type}
+          onChange={(e) => updateItem(item.id, { type: e.target.value as RequestType })}
+          className={fieldInputClass}
+        >
+          {TYPE_OPTIONS.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Assignee</Eyebrow>
+        <select value={item.assigneeId ?? ''} onChange={(e) => onAssigneeChange(e.target.value)} className={fieldInputClass}>
+          <option value="">Unassigned</option>
+          {roster.map((r) => (
+            <option key={r.id} value={r.id}>{r.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Eyebrow>Created</Eyebrow>
+        <input
+          type="date"
+          value={item.createdAt ? item.createdAt.slice(0, 10) : ''}
+          onChange={(e) =>
+            updateItem(item.id, { createdAt: e.target.value ? new Date(e.target.value).toISOString() : null })
+          }
+          className={fieldInputClass}
+        />
+      </div>
+      <div className="flex flex-col gap-1 relative">
+        <Eyebrow>RICE</Eyebrow>
+        <button type="button" onClick={() => setShowRice((v) => !v)} className={clsx(fieldInputClass, 'text-left')}>
+          {item.riceScore != null ? item.riceScore.toFixed(1) : '—'}
+        </button>
+        {/* align="right": the RICE field sits in the panel's right-hand
+            column, close to the panel's own right edge — a left-hung
+            popover would overflow off-screen, so it hangs from the right
+            instead (the same reasoning that makes "left" correct for the
+            wide Backlog table, inverted for this narrow panel). */}
+        {showRice && <RicePopover item={item} onClose={() => setShowRice(false)} align="right" />}
+      </div>
+    </div>
+  );
+}
 
 /** Estimated time, Customer name, Module, Tags — standard fields on every
  * task regardless of source, editable directly here. Keyed by item.id in

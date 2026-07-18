@@ -26,6 +26,7 @@ interface ItemRow {
   release_id: string | null;
   plan_bucket: string | null;
   created_at: string | null;
+  assignee_id: string | null;
   assignee: { name: string } | null;
   external_assignee_name: string | null;
   custom_fields: Record<string, string> | null;
@@ -36,7 +37,7 @@ interface ItemRow {
 }
 
 const ITEM_SELECT =
-  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, external_assignee_name, custom_fields, estimated_hours, customer_name, module, tags, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee_id, external_assignee_name, custom_fields, estimated_hours, customer_name, module, tags, assignee:profiles!backlog_items_assignee_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const [{ data, error }, { data: defs, error: defsError }] = await Promise.all([
@@ -53,6 +54,7 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     type: r.type,
     boardStatus: r.board_status,
     priority: r.priority,
+    ...(r.assignee_id ? { assigneeId: r.assignee_id } : {}),
     // Falls back to the Asana assignee's name when no workspace member's
     // email matched — keeps the owner visible instead of silently dropping
     // it, even though there's no local profile to link to.

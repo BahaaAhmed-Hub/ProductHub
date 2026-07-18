@@ -30,10 +30,11 @@ export function TopNav({ center, actions }: TopNavProps) {
 
   return (
     <header className="h-[52px] flex-shrink-0 border-b-[0.5px] border-hairline flex items-center justify-between px-3.5 bg-surface relative">
-      <div className="flex items-center gap-2 w-52">
-        <div className="w-5 h-5 rounded-md bg-navy text-white text-xs font-bold flex items-center justify-center">P</div>
-        <span className="text-sm font-semibold tracking-tight">ProductHub</span>
-      </div>
+      {/* Spacer — mirrors the width of the right-side action cluster so
+          `center` stays visually centered. The ProductHub logo already
+          lives in the Sidebar; rendering it again here duplicated it on
+          every internal screen. */}
+      <div className="w-52" />
 
       <div className="flex-1 flex items-center justify-center gap-4">{center}</div>
 

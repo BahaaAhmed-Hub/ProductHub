@@ -69,6 +69,26 @@ export function useTeamMembers(): { members: Member[]; isLoading: boolean } {
   return { members: q.data ?? [], isLoading: q.isLoading };
 }
 
+function initialsOf(name: string): string {
+  return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+}
+
+/** The roster offered by any assignee picker (Backlog bulk-assign, item
+ * detail panel) — active team members in real mode, or the fixture roster
+ * already used by mock board items so the picker stays walkable without
+ * Supabase configured. */
+export function useAssigneeRoster(): { id: string; name: string; initials: string }[] {
+  const { members } = useTeamMembers();
+  if (isSupabaseConfigured) {
+    return members.filter((m) => m.status === 'active').map((m) => ({ id: m.id, name: m.name, initials: initialsOf(m.name) }));
+  }
+  return [
+    { id: 'mock-ar', name: 'Amir R.', initials: 'AR' },
+    { id: 'mock-sk', name: 'Sara K.', initials: 'SK' },
+    { id: 'mock-dr', name: 'Devon R.', initials: 'DR' },
+  ];
+}
+
 export function useChangeMemberRole() {
   const qc = useQueryClient();
   return async (memberId: string, role: Role) => {

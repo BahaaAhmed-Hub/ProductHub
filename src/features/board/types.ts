@@ -7,6 +7,7 @@ export interface BoardItem {
   type: RequestType;
   boardStatus: BoardStatus;
   priority: Priority;
+  assigneeId?: string;
   assigneeName?: string;
   assigneeInitials?: string;
   sourceRequestId?: string;
