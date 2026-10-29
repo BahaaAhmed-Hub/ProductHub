@@ -5,6 +5,8 @@ import { Icon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { Segmented } from '@/components/ui/Segmented';
+import { SortHeader } from '@/components/ui/SortHeader';
+import { useSort } from '@/lib/useSort';
 import { Tag, TypeTag, PriorityTag } from '@/components/ui/Tag';
 import { BOARD_COLUMNS } from '@/features/board/types';
 import { useBoardItems, useMoveItem, useBulkActions } from '@/features/board/hooks';
@@ -475,6 +477,9 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   );
 }
 
+const PRIORITY_RANK: Record<Priority, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+const PLAN_RANK = ['backlog', 'planned', 'in_cycle'];
+
 function ListView({
   items,
   scoring,
@@ -494,6 +499,17 @@ function ListView({
 }) {
   const bulk = useBulkActions();
   const [rowError, setRowError] = useState<string | null>(null);
+  const { sorted, sort, toggle: onSort } = useSort(items, {
+    ref: (i: BoardItem) => i.ref,
+    title: (i) => i.title,
+    type: (i) => i.type,
+    priority: (i) => PRIORITY_RANK[i.priority],
+    created: (i) => (i.createdAt ? Date.parse(i.createdAt) : null),
+    module: (i) => i.module,
+    who: (i) => i.assigneeName,
+    rice: (i) => i.riceScore,
+    plan: (i) => (i.planBucket ? PLAN_RANK.indexOf(i.planBucket) : null),
+  });
   const allSelected = items.length > 0 && selected.size === items.length;
   const someSelected = selected.size > 0 && !allSelected;
 
@@ -510,11 +526,17 @@ function ListView({
           aria-label="Select all"
         />
         <span aria-hidden />
-        <span>Ref</span><span>Title</span><span>Type</span>
-        <span>Priority</span><span>Created</span><span>Module</span><span>Who</span>
-        <span className="text-right">RICE</span><span className="text-right">Plan</span>
+        <SortHeader label="Ref" sortKey="ref" sort={sort} onSort={onSort} />
+        <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} />
+        <SortHeader label="Type" sortKey="type" sort={sort} onSort={onSort} />
+        <SortHeader label="Priority" sortKey="priority" sort={sort} onSort={onSort} />
+        <SortHeader label="Created" sortKey="created" sort={sort} onSort={onSort} />
+        <SortHeader label="Module" sortKey="module" sort={sort} onSort={onSort} />
+        <SortHeader label="Who" sortKey="who" sort={sort} onSort={onSort} />
+        <SortHeader label="RICE" sortKey="rice" sort={sort} onSort={onSort} align="right" />
+        <SortHeader label="Plan" sortKey="plan" sort={sort} onSort={onSort} align="right" />
       </div>
-      {items.map((item) => (
+      {sorted.map((item) => (
         <div
           key={item.id}
           className={clsx(

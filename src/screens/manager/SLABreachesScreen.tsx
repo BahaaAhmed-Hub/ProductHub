@@ -1,6 +1,8 @@
 import { TopNav } from '@/components/layout/TopNav';
 import { KPITile } from '@/components/ui/KPITile';
 import { PriorityTag } from '@/components/ui/Tag';
+import { SortHeader } from '@/components/ui/SortHeader';
+import { useSort } from '@/lib/useSort';
 import { useRequests } from '@/features/requests/hooks';
 import type { Priority } from '@/types/domain';
 
@@ -26,6 +28,14 @@ export function SLABreachesScreen() {
     .filter((x) => x.sla && (x.sla.kind === 'breach' || x.sla.kind === 'risk'))
     .sort((a, b) => (a.sla!.hoursLeft) - (b.sla!.hoursLeft));
 
+  const PRIORITY_RANK: Record<Priority, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+  const { sorted, sort, toggle: onSort } = useSort(rows, {
+    ref: (x: (typeof rows)[number]) => x.r.ref,
+    subject: (x) => x.r.subject,
+    customer: (x) => x.r.submittedByName,
+    priority: (x) => PRIORITY_RANK[x.r.priority],
+    sla: (x) => x.sla?.hoursLeft,
+  });
   const breached = rows.filter((x) => x.sla!.kind === 'breach').length;
   const atRisk = rows.filter((x) => x.sla!.kind === 'risk').length;
 
@@ -44,9 +54,13 @@ export function SLABreachesScreen() {
         ) : (
           <div className="bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame overflow-hidden max-w-4xl">
             <div className="grid grid-cols-[92px_1fr_120px_90px_130px] gap-3 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
-              <span>Ref</span><span>Subject</span><span>Customer</span><span>Priority</span><span className="text-right">SLA</span>
+              <SortHeader label="Ref" sortKey="ref" sort={sort} onSort={onSort} />
+              <SortHeader label="Subject" sortKey="subject" sort={sort} onSort={onSort} />
+              <SortHeader label="Customer" sortKey="customer" sort={sort} onSort={onSort} />
+              <SortHeader label="Priority" sortKey="priority" sort={sort} onSort={onSort} />
+              <SortHeader label="SLA" sortKey="sla" sort={sort} onSort={onSort} align="right" />
             </div>
-            {rows.map(({ r, sla }) => (
+            {sorted.map(({ r, sla }) => (
               <div key={r.id} className="grid grid-cols-[92px_1fr_120px_90px_130px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0">
                 <span className="font-mono text-[11px] text-label">{r.ref}</span>
                 <span className="text-[13px] font-medium truncate">{r.subject}</span>

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Icon } from '@/components/ui/Icon';
 import { Segmented } from '@/components/ui/Segmented';
+import { SortHeader } from '@/components/ui/SortHeader';
+import { useSort } from '@/lib/useSort';
 import { TypeTag } from '@/components/ui/Tag';
 import { StatusBadge } from '@/features/requests/StatusBadge';
 import { useRequestsStore } from '@/features/requests/store';
@@ -18,6 +20,15 @@ export function MyRequestsScreen() {
   const { selected, toggleSelected, clearSelected } = useRequestsStore();
   const archive = useArchiveRequests();
   const [view, setView] = useState<View>('list');
+  const STATUS_RANK: Record<string, number> = { received: 0, in_progress: 1, resolved: 2 };
+  const { sorted: sortedRequests, sort, toggle: onSort } = useSort(requests, {
+    ref: (r: CustomerRequest) => r.ref,
+    subject: (r) => r.subject,
+    type: (r) => r.type,
+    status: (r) => STATUS_RANK[r.status],
+    planned: (r) => r.plannedRelease,
+    submitted: (r) => (r.createdAt ? Date.parse(r.createdAt) : null),
+  });
   const openCount = requests.filter((r) => r.status !== 'resolved').length;
 
   async function onArchive() {
@@ -30,7 +41,7 @@ export function MyRequestsScreen() {
   ).map((type) => ({
     type,
     label: type === 'bug' ? 'Bugs' : type === 'feature' ? 'Features' : 'Queries',
-    rows: requests.filter((r) => r.type === type),
+    rows: sortedRequests.filter((r) => r.type === type),
   }));
 
   return (
@@ -72,12 +83,12 @@ export function MyRequestsScreen() {
         {/* Header row */}
         <div className="grid grid-cols-[24px_92px_1fr_84px_120px_150px_100px] gap-3 px-3 pb-2 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
           <span />
-          <span>Ref</span>
-          <span>Subject</span>
-          <span>Type</span>
-          <span>Status</span>
-          <span>Planned</span>
-          <span className="text-right">Submitted</span>
+          <SortHeader label="Ref" sortKey="ref" sort={sort} onSort={onSort} />
+          <SortHeader label="Subject" sortKey="subject" sort={sort} onSort={onSort} />
+          <SortHeader label="Type" sortKey="type" sort={sort} onSort={onSort} />
+          <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} />
+          <SortHeader label="Planned" sortKey="planned" sort={sort} onSort={onSort} />
+          <SortHeader label="Submitted" sortKey="submitted" sort={sort} onSort={onSort} align="right" />
         </div>
 
         {isLoading && (
@@ -94,7 +105,7 @@ export function MyRequestsScreen() {
         {!isLoading &&
           requests.length > 0 &&
           (view === 'list' ? (
-            requests.map((r) => (
+            sortedRequests.map((r) => (
               <RequestRow
                 key={r.id}
                 r={r}

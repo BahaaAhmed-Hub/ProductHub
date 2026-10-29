@@ -6,6 +6,8 @@ import { invoke } from '@/lib/edgeFunctions';
 
 export interface AsanaConnection {
   connected: boolean;
+  /** Push every edit to a synced task back to Asana automatically. */
+  autoPush: boolean;
 }
 
 export interface AsanaProjectGroup {
@@ -57,7 +59,7 @@ export interface CustomFieldDef {
   name: string;
 }
 
-const NOT_CONNECTED: AsanaConnection = { connected: false };
+const NOT_CONNECTED: AsanaConnection = { connected: false, autoPush: false };
 
 /** Exported so the UI can display the exact value being sent — Asana's
  * "redirect_uri does not match" error never echoes back what was sent, so
@@ -83,11 +85,11 @@ export function useAsanaConnection(): { connection: AsanaConnection; isLoading: 
     queryFn: async (): Promise<AsanaConnection> => {
       const { data, error } = await supabase
         .from('integration_connections')
-        .select('id')
+        .select('id, auto_push')
         .eq('provider', 'asana')
         .maybeSingle();
       if (error) throw error;
-      return { connected: Boolean(data) };
+      return { connected: Boolean(data), autoPush: Boolean((data as { auto_push?: boolean } | null)?.auto_push) };
     },
   });
   if (!isSupabaseConfigured) return { connection: NOT_CONNECTED, isLoading: false };
@@ -366,10 +368,74 @@ export function useAsanaActions() {
       ]);
       return result;
     },
+    async setAutoPush(enabled: boolean) {
+      const { error } = await supabase.from('integration_connections').update({ auto_push: enabled }).eq('provider', 'asana');
+      if (error) throw error;
+      await invalidate();
+    },
     async disconnect() {
       const { error } = await supabase.from('integration_connections').delete().eq('provider', 'asana');
       if (error) throw error;
       await invalidate();
     },
   };
+}
+
+export interface PushResult {
+  id: string;
+  status: 'ok' | 'partial' | 'error' | 'skipped';
+  detail: string;
+}
+
+/** Push synced tasks' local edits to Asana (asana-push): writes, re-reads to
+ * validate, and logs each result. `moduleRename` also renames the Asana
+ * option so existing tasks keep pointing at it. */
+export async function pushToAsana(itemIds: string[], moduleRename?: { from: string; to: string }): Promise<PushResult[]> {
+  if (itemIds.length === 0) return [];
+  const res = await invoke<{ results: PushResult[] }>('asana-push', { itemIds, ...(moduleRename ? { moduleRename } : {}) });
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['board'] }),
+    queryClient.invalidateQueries({ queryKey: ['asana-sync-log'] }),
+  ]);
+  return res.results;
+}
+
+/** One-line outcome for a batch of push results, for inline status text. */
+export function summarizePush(results: PushResult[]): string {
+  if (results.length === 0) return 'Nothing to sync.';
+  const bad = results.filter((r) => r.status === 'error' || r.status === 'partial');
+  if (bad.length > 0) return `${bad.length} of ${results.length} not confirmed by Asana: ${bad[0]?.detail ?? ''}`;
+  const skipped = results.filter((r) => r.status === 'skipped');
+  if (skipped.length === results.length) return skipped[0]?.detail ?? 'Not pushed.';
+  return results.length === 1 ? (results[0]?.detail ?? 'Synced.') : `Synced ${results.length} tasks to Asana.`;
+}
+
+export interface SyncLogEntry {
+  id: string;
+  itemRef: string | null;
+  action: string;
+  status: PushResult['status'];
+  detail: string;
+  createdAt: string;
+}
+
+export function useSyncLog(enabled = true): { entries: SyncLogEntry[]; isLoading: boolean } {
+  const q = useQuery({
+    queryKey: ['asana-sync-log'],
+    enabled: isSupabaseConfigured && enabled,
+    queryFn: async (): Promise<SyncLogEntry[]> => {
+      const { data, error } = await supabase
+        .from('integration_sync_log')
+        .select('id, item_ref, action, status, detail, created_at')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (
+        data as { id: string; item_ref: string | null; action: string; status: SyncLogEntry['status']; detail: string; created_at: string }[]
+      ).map((r) => ({
+        id: r.id, itemRef: r.item_ref, action: r.action, status: r.status, detail: r.detail, createdAt: r.created_at,
+      }));
+    },
+  });
+  return { entries: q.data ?? [], isLoading: q.isLoading };
 }

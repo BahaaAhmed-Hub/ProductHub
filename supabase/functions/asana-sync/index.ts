@@ -22,6 +22,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient, requireManager } from '../_shared/authedClient.ts';
 import { asanaFetchAllPages, ensureFreshToken, mapConcurrent } from '../_shared/asana.ts';
 import { detectModule, detectType } from '../_shared/detect.ts';
+import { ARCHIVED_SECTION, namedField, priorityFrom, statusFrom, typeFrom } from '../_shared/asanaMap.ts';
 
 interface AsanaCustomFieldValue {
   gid: string;
@@ -91,53 +92,6 @@ function displayValue(t: AsanaTask, sourceField: string): string | undefined {
       return t.custom_fields.find((c) => c.gid === sourceField)?.display_value ?? undefined;
   }
 }
-
-// ---- Same-name auto-mapping ------------------------------------------------
-// With no explicit field mapping for a target, an Asana custom field whose
-// NAME matches the ProductHub field (Priority, Type, Module, Customer,
-// Estimated time, Status) is used directly, and its values are translated by
-// keyword. Explicit mappings always win.
-const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const FIELD_NAMES: Record<string, string[]> = {
-  priority: ['priority', 'severity', 'urgency'],
-  type: ['type', 'task type', 'issue type', 'ticket type', 'kind', 'category'],
-  status: ['status', 'stage', 'state', 'progress'],
-  module: ['module', 'component', 'area', 'feature area', 'product area'],
-  customer: ['customer', 'customer name', 'client', 'account'],
-  estimated: ['estimated time', 'estimated hours', 'estimate', 'estimation', 'time estimate'],
-};
-function namedField(t: AsanaTask, key: keyof typeof FIELD_NAMES): AsanaCustomFieldValue | undefined {
-  const names = FIELD_NAMES[key];
-  return t.custom_fields.find((c) => c.name && names.includes(norm(c.name)));
-}
-function priorityFrom(v: string | undefined): string | undefined {
-  if (!v) return undefined;
-  const x = norm(v);
-  if (/^(critical|urgent|blocker|highest|p0|sev 1|severity 1)$/.test(x)) return 'critical';
-  if (/^(high|major|important|p1|sev 2|severity 2)$/.test(x)) return 'high';
-  if (/^(medium|normal|moderate|med|p2|sev 3|severity 3)$/.test(x)) return 'medium';
-  if (/^(low|minor|lowest|trivial|p3|p4|sev 4|severity 4)$/.test(x)) return 'low';
-  return undefined;
-}
-function typeFrom(v: string | undefined): string | undefined {
-  if (!v) return undefined;
-  const x = norm(v);
-  if (/\b(bug|defect|incident|error)\b/.test(x)) return 'bug';
-  if (/\b(feature|enhancement|story|improvement|epic)\b/.test(x)) return 'feature';
-  if (/\brequest\b/.test(x)) return 'request';
-  if (/\b(query|question|inquiry)\b/.test(x)) return 'query';
-  return undefined;
-}
-function statusFrom(v: string | undefined): string | undefined {
-  if (!v) return undefined;
-  const x = norm(v);
-  if (/\b(done|complete|completed|released|shipped|closed|resolved|deployed|live)\b/.test(x)) return 'released';
-  if (/\b(qa|test|testing|review|verify|verification|uat)\b/.test(x)) return 'in_qa';
-  if (/\b(progress|doing|dev|development|started|active|wip|building)\b/.test(x)) return 'in_development';
-  if (/\b(backlog|todo|to do|new|open|triage|triaged|planned|not started|inbox)\b/.test(x)) return 'triaged';
-  return undefined;
-}
-const ARCHIVED_SECTION = /^archived?$/i;
 
 interface TeamRow {
   id: string;
@@ -330,11 +284,11 @@ Deno.serve(async (req) => {
       const inArchivedSection = !!section && ARCHIVED_SECTION.test(section.trim());
       if (!board_status && t.completed) board_status = 'released';
       if (!board_status) {
-        board_status = statusFrom(namedField(t, 'status')?.enum_value?.name) ?? (inArchivedSection ? undefined : statusFrom(section));
+        board_status = statusFrom(namedField(t.custom_fields, 'status')?.enum_value?.name) ?? (inArchivedSection ? undefined : statusFrom(section));
       }
       if (!board_status) board_status = 'triaged';
-      if (!priority) priority = priorityFrom(namedField(t, 'priority')?.enum_value?.name ?? namedField(t, 'priority')?.display_value ?? undefined);
-      if (!type) type = typeFrom(namedField(t, 'type')?.enum_value?.name ?? namedField(t, 'type')?.display_value ?? undefined);
+      if (!priority) priority = priorityFrom(namedField(t.custom_fields, 'priority')?.enum_value?.name ?? namedField(t.custom_fields, 'priority')?.display_value ?? undefined);
+      if (!type) type = typeFrom(namedField(t.custom_fields, 'type')?.enum_value?.name ?? namedField(t.custom_fields, 'type')?.display_value ?? undefined);
       // No field gave a type — read it from the title/body; a hand-edited type is kept.
       if (locked.has('type') && existing) type = existing.type;
       else if (!type) type = detectType(t.name, t.notes ?? '') ?? undefined;
@@ -362,14 +316,14 @@ Deno.serve(async (req) => {
       // Only a fallback label now — members are created for every assignee.
       const external_assignee_name = !member && t.assignee ? t.assignee.name : null;
 
-      const estimatedRaw = lastMappedValue(t, estimatedHoursMappings) ?? namedField(t, 'estimated')?.display_value ?? undefined;
+      const estimatedRaw = lastMappedValue(t, estimatedHoursMappings) ?? namedField(t.custom_fields, 'estimated')?.display_value ?? undefined;
       const estimatedNum = estimatedRaw ? Number(estimatedRaw.replace(/[^0-9.]/g, '')) : NaN;
       const estimated_hours = Number.isFinite(estimatedNum) ? estimatedNum : null;
-      const customer_name = lastMappedValue(t, customerNameMappings) ?? namedField(t, 'customer')?.display_value ?? null;
+      const customer_name = lastMappedValue(t, customerNameMappings) ?? namedField(t.custom_fields, 'customer')?.display_value ?? null;
       let module: string | null =
         lastMappedValue(t, moduleMappings) ??
-        namedField(t, 'module')?.enum_value?.name ??
-        namedField(t, 'module')?.display_value ??
+        namedField(t.custom_fields, 'module')?.enum_value?.name ??
+        namedField(t.custom_fields, 'module')?.display_value ??
         detectModule(t.name, t.notes ?? '', moduleCatalog);
       if (locked.has('module') && existing) module = existing.module;
       if (module && !knownModules.has(module.toLowerCase())) newModules.add(module);
@@ -396,6 +350,9 @@ Deno.serve(async (req) => {
         external_assignee_name,
         // The real Asana creation date — not the moment it was imported here.
         created_at: t.created_at ?? existing?.created_at ?? new Date().toISOString(),
+        // Marks this write as a pull so the dirty-tracking trigger doesn't count it as a local edit.
+        last_pulled_at: new Date().toISOString(),
+        dirty_since: null,
         archived_at: inArchivedSection ? (existing?.archived_at ?? new Date().toISOString()) : null,
         custom_fields,
         external_source: 'asana',

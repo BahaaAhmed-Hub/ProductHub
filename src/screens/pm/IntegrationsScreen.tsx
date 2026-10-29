@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Tag } from '@/components/ui/Tag';
 import { Icon } from '@/components/ui/Icon';
 import {
-  connectAsana, useAsanaConnection, useAsanaProjects, useAsanaAddedProjects, useAsanaActions, REDIRECT_URI,
+  connectAsana, useSyncLog, useAsanaConnection, useAsanaProjects, useAsanaAddedProjects, useAsanaActions, REDIRECT_URI,
   type AsanaProjectGroup,
 } from '@/features/integrations/asana';
 import { AsanaFieldMapping } from '@/features/integrations/AsanaFieldMapping';
@@ -46,6 +46,8 @@ function AsanaCard() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncNote, setSyncNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showLog, setShowLog] = useState(false);
+  const { entries: logEntries, isLoading: logLoading } = useSyncLog(showLog);
 
   const addedGids = new Set(added.map((p) => p.externalProjectGid));
 
@@ -127,7 +129,7 @@ function AsanaCard() {
       <div>
         <div className="text-[15px] font-semibold">Asana</div>
         <div className="text-[12px] text-body mt-1">
-          Import tasks from any number of Asana projects into the backlog. One-way, manual sync per project.
+          Import tasks from any number of Asana projects into the backlog (manual sync per project), and optionally push edits back.
         </div>
       </div>
 
@@ -210,6 +212,54 @@ function AsanaCard() {
                       </button>
                     );
                   })}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <label className="flex items-start gap-2 text-[12px] cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-navy"
+              checked={connection.autoPush}
+              onChange={(e) => {
+                setError(null);
+                actions.setAutoPush(e.target.checked).catch((err: unknown) =>
+                  setError(err instanceof Error ? err.message : 'Could not save the setting.'),
+                );
+              }}
+            />
+            <span>
+              <span className="font-medium">Automatically sync changes back to Asana</span>
+              <span className="block text-[11px] text-label">
+                Every edit to a synced task is written to Asana, re-read to confirm, and logged. When off, each task has a
+                sync button instead.
+              </span>
+            </span>
+          </label>
+
+          <button className="text-[12px] text-accent text-left" onClick={() => setShowLog((v) => !v)}>
+            {showLog ? 'Hide sync log' : 'View sync log'}
+          </button>
+          {showLog && (
+            <div className="border-[0.5px] border-hairline rounded-control max-h-56 overflow-y-auto scroll-thin">
+              {logLoading && <div className="p-3 text-[12px] text-label">Loading…</div>}
+              {!logLoading && logEntries.length === 0 && <div className="p-3 text-[12px] text-label">No push attempts yet.</div>}
+              {logEntries.map((e) => (
+                <div key={e.id} className="px-3 py-2 border-t-[0.5px] first:border-t-0 border-hairline">
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span
+                      className={
+                        e.status === 'ok' ? 'text-success font-medium' : e.status === 'skipped' ? 'text-label font-medium' : 'text-danger font-medium'
+                      }
+                    >
+                      {e.status}
+                    </span>
+                    <span className="font-mono text-label">{e.itemRef ?? '—'}</span>
+                    {e.action === 'module_rename' && <span className="text-label">module rename</span>}
+                    <span className="ml-auto text-label">{timeAgo(e.createdAt)}</span>
+                  </div>
+                  <div className="text-[11px] text-body mt-0.5">{e.detail}</div>
                 </div>
               ))}
             </div>

@@ -2,6 +2,8 @@ import { TopNav } from '@/components/layout/TopNav';
 import { KPITile } from '@/components/ui/KPITile';
 import { Card } from '@/components/ui/Card';
 import { Avatar } from '@/components/ui/Avatar';
+import { SortHeader } from '@/components/ui/SortHeader';
+import { useSort } from '@/lib/useSort';
 import { useBoardItems } from '@/features/board/hooks';
 import { useRequests } from '@/features/requests/hooks';
 import type { Priority } from '@/types/domain';
@@ -36,7 +38,12 @@ export function ManagerDashboard() {
     else cur.load += 1;
     byPerson.set(name, cur);
   }
-  const team = [...byPerson.values()].sort((a, b) => b.resolved - a.resolved);
+  const defaultTeam = [...byPerson.values()].sort((a, b) => b.resolved - a.resolved);
+  const { sorted: team, sort, toggle: onSort } = useSort(defaultTeam, {
+    developer: (t: (typeof defaultTeam)[number]) => t.name,
+    resolved: (t) => t.resolved,
+    active: (t) => t.load,
+  });
 
   return (
     <>
@@ -54,7 +61,9 @@ export function ManagerDashboard() {
           <Card className="p-5">
             <div className="text-sm font-semibold mb-3">Team performance</div>
             <div className="grid grid-cols-[1fr_100px_70px] gap-3 px-1 pb-2 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
-              <span>Developer</span><span className="text-right">Resolved</span><span className="text-right">Active</span>
+              <SortHeader label="Developer" sortKey="developer" sort={sort} onSort={onSort} />
+              <SortHeader label="Resolved" sortKey="resolved" sort={sort} onSort={onSort} align="right" />
+              <SortHeader label="Active" sortKey="active" sort={sort} onSort={onSort} align="right" />
             </div>
             {team.length === 0 ? (
               <div className="py-6 text-[13px] text-body">No assigned work yet.</div>
