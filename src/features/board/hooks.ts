@@ -105,7 +105,7 @@ export function useUpdateItem() {
   };
 }
 
-type AsanaAction = 'complete' | 'reopen' | 'archive' | 'unarchive';
+type AsanaAction = 'complete' | 'reopen' | 'archive' | 'unarchive' | 'delete';
 
 /** Backlog multi-select actions — one round trip per action in real mode
  * (an .in('id', ids) update/delete), a loop over the mock store otherwise.
@@ -124,7 +124,7 @@ export function useBulkActions() {
 
   /** Returns the ids that may be changed locally; throws after the local
    * change is applied (by the caller) if some Asana updates failed. */
-  async function pushToAsana(action: AsanaAction, ids: string[]): Promise<{ okIds: string[]; failure?: string }> {
+  async function writeToAsana(action: AsanaAction, ids: string[]): Promise<{ okIds: string[]; failure?: string }> {
     const known = qc.getQueryData<BoardItem[]>(['board']) ?? [];
     const synced = ids.some((id) => known.find((i) => i.id === id)?.externalSource === 'asana');
     if (!synced) return { okIds: ids };
@@ -146,7 +146,7 @@ export function useBulkActions() {
 
   async function viaAsana(action: AsanaAction, ids: string[], applyReal: (okIds: string[]) => Promise<void>, applyMock: (id: string) => void) {
     if (isSupabaseConfigured) {
-      const { okIds, failure } = await pushToAsana(action, ids);
+      const { okIds, failure } = await writeToAsana(action, ids);
       if (okIds.length > 0) await applyReal(okIds);
       await invalidate();
       if (failure) throw new Error(failure);
@@ -174,10 +174,15 @@ export function useBulkActions() {
       }
       ids.forEach((id) => mockPatch(id, module ? { module } : { module: undefined }));
     },
-    async remove(ids: string[]): Promise<void> {
+    /** Delete tasks here; `alsoAsana` deletes the synced ones in Asana first (any Asana failure aborts that task's deletion). */
+    async remove(ids: string[], opts: { alsoAsana?: boolean } = {}): Promise<void> {
       if (isSupabaseConfigured) {
-        await bulkDeleteItems(ids);
+        let okIds = ids;
+        let failure: string | undefined;
+        if (opts.alsoAsana) ({ okIds, failure } = await writeToAsana('delete', ids));
+        if (okIds.length > 0) await bulkDeleteItems(okIds);
         await invalidate();
+        if (failure) throw new Error(failure);
         return;
       }
       mockDelete(ids);
