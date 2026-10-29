@@ -41,16 +41,38 @@ const PLAN_OPTIONS: { value: string; label: string }[] = [
 ];
 const UNASSIGNED = '__unassigned__';
 
+type Period = 'last7' | 'last30' | 'last90' | 'thisYear';
+const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+  { value: 'last7', label: 'Last 7 days' },
+  { value: 'last30', label: 'Last 30 days' },
+  { value: 'last90', label: 'Last 90 days' },
+  { value: 'thisYear', label: 'This year' },
+];
+
+/** Earliest createdAt a period admits — "created on or after this date". */
+function periodCutoff(period: Period): Date {
+  const now = new Date();
+  if (period === 'thisYear') return new Date(now.getFullYear(), 0, 1);
+  const days = period === 'last7' ? 7 : period === 'last30' ? 30 : 90;
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+}
+
 interface Filters {
   types: Set<RequestType>;
   priorities: Set<Priority>;
   plans: Set<string>;
   assigneeIds: Set<string>;
+  // Single-select, unlike the Sets above — "created in the last 30 days"
+  // and "created in the last 90 days" aren't something you'd ever want
+  // combined, so this is one active period or none rather than a Set.
+  period: Period | null;
 }
-const EMPTY_FILTERS: Filters = { types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set() };
+const EMPTY_FILTERS: Filters = {
+  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), period: null,
+};
 
 function filterCount(f: Filters): number {
-  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size;
+  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.period ? 1 : 0);
 }
 
 function matchesFilters(item: BoardItem, f: Filters): boolean {
@@ -58,6 +80,9 @@ function matchesFilters(item: BoardItem, f: Filters): boolean {
   if (f.priorities.size > 0 && !f.priorities.has(item.priority)) return false;
   if (f.plans.size > 0 && !f.plans.has(item.planBucket ?? '')) return false;
   if (f.assigneeIds.size > 0 && !f.assigneeIds.has(item.assigneeId ?? UNASSIGNED)) return false;
+  if (f.period) {
+    if (!item.createdAt || new Date(item.createdAt) < periodCutoff(f.period)) return false;
+  }
   return true;
 }
 
@@ -319,13 +344,25 @@ function FilterPopover({
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-11 z-50 w-[280px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop p-4 flex flex-col gap-3.5">
+      <div className="absolute right-0 top-11 z-50 w-[300px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop p-4 flex flex-col gap-3.5">
         <div className="flex items-center justify-between">
           <span className="text-[13px] font-semibold">Filter</span>
           <button className="text-[11.5px] text-accent font-medium" onClick={() => onChange(EMPTY_FILTERS)}>
             Clear all
           </button>
         </div>
+
+        <FilterSection label="Created">
+          {PERIOD_OPTIONS.map((p) => (
+            <FilterChip
+              key={p.value}
+              active={filters.period === p.value}
+              onClick={() => onChange({ ...filters, period: filters.period === p.value ? null : p.value })}
+            >
+              {p.label}
+            </FilterChip>
+          ))}
+        </FilterSection>
 
         <FilterSection label="Type">
           {TYPE_OPTIONS.map((t) => (
