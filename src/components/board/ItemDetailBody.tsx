@@ -82,20 +82,28 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
       <PanelHeader itemRef={item.ref} onClose={onClose} />
       <div className="flex-1 overflow-y-auto scroll-thin px-6 py-5">
         {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="text-lg font-semibold tracking-tight leading-snug">{item.title}</h1>
-          <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+        <div className="flex items-start gap-2.5">
           <button
+            type="button"
             onClick={() => {
               setActionError(null);
               (isReleased ? bulk.reopen([item.id]) : bulk.complete([item.id])).catch((e: unknown) =>
                 setActionError(e instanceof Error ? e.message : 'Action failed.'),
               );
             }}
-            className="inline-flex items-center gap-1.5 text-[12px] text-success font-medium hover:opacity-80 flex-shrink-0 mt-0.5"
+            title={isReleased ? 'Completed — click to reopen' : 'Mark complete'}
+            aria-label={isReleased ? 'Reopen task' : 'Mark task complete'}
+            className={clsx(
+              'flex-shrink-0 mt-px w-7 h-7 flex items-center justify-center rounded-full',
+              isReleased ? 'text-success' : 'text-label hover:text-success',
+            )}
           >
-            <Icon name="check" size={15} /> {isReleased ? 'Completed · Reopen' : 'Mark complete'}
+            <Icon name={isReleased ? 'check_circle' : 'radio_button_unchecked'} size={22} />
           </button>
+          <h1 className={clsx('flex-1 min-w-0 text-lg font-semibold tracking-tight leading-snug', isReleased && 'text-label line-through')}>
+            {item.title}
+          </h1>
+          <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
           <AsanaSyncButton item={item} onResult={setActionNote} />
           <button
             type="button"

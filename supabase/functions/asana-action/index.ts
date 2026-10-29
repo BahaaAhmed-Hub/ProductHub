@@ -10,6 +10,7 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient } from '../_shared/authedClient.ts';
 import { asanaFetch, asanaWrite, ensureFreshToken, mapConcurrent } from '../_shared/asana.ts';
+import { COMPLETED_SECTION } from '../_shared/asanaMap.ts';
 
 type Action = 'complete' | 'reopen' | 'archive' | 'unarchive' | 'delete';
 interface Body {
@@ -89,6 +90,27 @@ Deno.serve(async (req) => {
           }
           if (body.action === 'complete' || body.action === 'reopen') {
             await asanaWrite(token, 'PUT', `/tasks/${item.external_id}`, { completed: body.action === 'complete' });
+            // Also move it between the project's "Completed" column and the rest, where the
+            // project has one. Best-effort: the task itself is already marked done/reopened.
+            try {
+              const task = (await asanaFetch(
+                token,
+                `/tasks/${item.external_id}?opt_fields=memberships.project.gid,memberships.section.gid,memberships.section.name`,
+              )) as { memberships: { project: { gid: string } | null; section: { gid: string; name: string } | null }[] };
+              for (const m of task.memberships) {
+                if (!m.project) continue;
+                const sections = await sectionsOf(m.project.gid);
+                const inDone = !!m.section && COMPLETED_SECTION.test(m.section.name.trim());
+                let target: Section | undefined;
+                if (body.action === 'complete' && !inDone) target = sections.find((s) => COMPLETED_SECTION.test(s.name.trim()));
+                if (body.action === 'reopen' && inDone) {
+                  target = sections.find((s) => !COMPLETED_SECTION.test(s.name.trim()) && !ARCHIVED.test(s.name.trim()));
+                }
+                if (target) await asanaWrite(token, 'POST', `/sections/${target.gid}/addTask`, { task: item.external_id });
+              }
+            } catch (_) {
+              // ignore — see above
+            }
             return { id: item.id, status: 'ok' };
           }
           const task = (await asanaFetch(
