@@ -25,12 +25,29 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
   const { items } = useBoardItems();
   const bulk = useBulkActions();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNote, setActionNote] = useState<{ text: string; ok: boolean } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [alsoAsana, setAlsoAsana] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const item = items.find((i) => i.id === itemId);
   const { notes } = useItemNotes(itemId);
   const addNote = useAddNote(itemId);
   const [channel, setChannel] = useState<'internal' | 'external'>('internal');
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
+
+  async function onDelete() {
+    setDeleting(true);
+    setActionError(null);
+    try {
+      await bulk.remove([itemId], { alsoAsana });
+      onClose();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Could not delete the task.');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function onSend() {
     if (!comment.trim()) return;
@@ -67,6 +84,7 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-lg font-semibold tracking-tight leading-snug">{item.title}</h1>
+          <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
           <button
             onClick={() => {
               setActionError(null);
@@ -78,12 +96,53 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
           >
             <Icon name="check" size={15} /> {isReleased ? 'Completed · Reopen' : 'Mark complete'}
           </button>
+          <AsanaSyncButton item={item} onResult={setActionNote} />
+          <button
+            type="button"
+            onClick={() => { setConfirmDelete((v) => !v); setActionError(null); }}
+            title="Delete task"
+            aria-label="Delete task"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-label hover:text-danger hover:bg-[#F4F3F0]"
+          >
+            <Icon name="delete" size={16} />
+          </button>
+          </div>
         </div>
         {actionError && <div className="text-[12px] text-danger mt-1">{actionError}</div>}
+        {actionNote && (
+          <div className={clsx('text-[12px] mt-1', actionNote.ok ? 'text-success' : 'text-danger')}>{actionNote.text}</div>
+        )}
+        {confirmDelete && (
+          <div className="mt-3 rounded-frame border border-danger p-3">
+            <div className="text-[13px] font-medium">Delete {item.ref}?</div>
+            <div className="text-[12px] text-body mt-0.5">This removes the task and its comments from ProductHub.</div>
+            {item.externalSource === 'asana' && (
+              <label className="flex items-start gap-2 mt-2 text-[12px] cursor-pointer">
+                <input type="checkbox" className="mt-0.5 accent-navy" checked={alsoAsana} onChange={(e) => setAlsoAsana(e.target.checked)} />
+                <span>
+                  Also delete it in Asana
+                  <span className="block text-[11px] text-label">
+                    If unchecked, it stays in Asana and the next sync brings it back.
+                  </span>
+                </span>
+              </label>
+            )}
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={onDelete}
+                className="h-8 px-3 rounded-control bg-danger text-white text-[12px] font-medium disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete task'}
+              </button>
+              <button type="button" className="h-8 px-3 text-[12px] text-body" onClick={() => setConfirmDelete(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           <PriorityTag priority={item.priority} />
           <Tag tone="pm">{statusLabel}</Tag>
-          <AsanaSyncButton item={item} />
           {slaLabel(item.createdAt, item.priority, isReleased) && (
             <span className="inline-flex items-center gap-1 text-[11px] text-[#9A6410] font-mono">
               <Icon name="schedule" size={13} /> {slaLabel(item.createdAt, item.priority, isReleased)}
@@ -94,13 +153,13 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
         {/* Primary fields — every one editable in place: Type/Priority as
             dropdowns, Assignee from the team roster, Created as a date,
             RICE opens the same scoring popover as the Backlog list. */}
-        <PrimaryFields key={item.id} item={item} />
+        <PrimaryFields key={`primary-${item.id}`} item={item} />
 
         <DetectBar item={item} />
 
         {/* Default task fields — available on every item regardless of
             source, editable inline. */}
-        <DefaultFields key={item.id} item={item} />
+        <DefaultFields key={`defaults-${item.id}`} item={item} />
 
         {/* Custom fields — created on the fly from the Asana field-mapping
             panel; hidden entirely for items with none, shown only for the
@@ -171,48 +230,52 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-/** Manual "sync this task to Asana" — shown for synced tasks when automatic
- * sync is off (when it's on, every edit is pushed and logged on its own). */
-function AsanaSyncButton({ item }: { item: BoardItem }) {
+/** "Sync this task to Asana" icon — for synced tasks. With automatic sync on
+ * it shows as a passive indicator (every edit is pushed and logged on its
+ * own); otherwise clicking pushes the task, re-reads it from Asana to confirm,
+ * and reports the outcome through `onResult`. Highlighted when the task has
+ * local changes that haven't been pushed. */
+function AsanaSyncButton({ item, onResult }: { item: BoardItem; onResult: (r: { text: string; ok: boolean } | null) => void }) {
   const { connection } = useAsanaConnection();
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   if (item.externalSource !== 'asana') return null;
+
   if (connection.autoPush) {
-    return <span className="text-[11px] text-label inline-flex items-center gap-1"><Icon name="sync" size={13} /> Auto-syncing to Asana</span>;
+    return (
+      <span title="Changes are synced to Asana automatically" className="w-7 h-7 flex items-center justify-center text-success">
+        <Icon name="sync" size={16} />
+      </span>
+    );
   }
 
   async function run() {
     setBusy(true);
-    setMessage(null);
+    onResult(null);
     try {
       const results = await pushToAsana([item.id]);
-      setMessage({ text: summarizePush(results), ok: results.every((r) => r.status === 'ok') });
+      onResult({ text: summarizePush(results), ok: results.every((r) => r.status === 'ok') });
     } catch (e) {
-      setMessage({ text: e instanceof Error ? e.message : 'Sync to Asana failed.', ok: false });
+      onResult({ text: e instanceof Error ? e.message : 'Sync to Asana failed.', ok: false });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={run}
-        disabled={busy}
-        title={item.dirtySince ? 'Changed here since the last sync — push to Asana' : 'Push this task to Asana'}
-        aria-label="Sync to Asana"
-        className={clsx(
-          'relative inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[11px] font-medium disabled:opacity-50',
-          item.dirtySince ? 'border-accent text-accent' : 'border-hairline text-label hover:text-body',
-        )}
-      >
-        <Icon name="sync" size={13} className={busy ? 'animate-spin' : undefined} />
-        {busy ? 'Syncing…' : item.dirtySince ? 'Sync to Asana' : 'Synced'}
-      </button>
-      {message && <span className={clsx('text-[11px]', message.ok ? 'text-success' : 'text-danger')}>{message.text}</span>}
-    </span>
+    <button
+      type="button"
+      onClick={run}
+      disabled={busy}
+      title={item.dirtySince ? 'Changed here since the last sync — push to Asana' : 'Sync this task to Asana'}
+      aria-label="Sync to Asana"
+      className={clsx(
+        'relative w-7 h-7 rounded-md flex items-center justify-center disabled:opacity-60 hover:bg-[#F4F3F0]',
+        item.dirtySince ? 'text-accent' : 'text-label hover:text-body',
+      )}
+    >
+      <Icon name="sync" size={16} className={busy ? 'animate-spin' : undefined} />
+      {item.dirtySince && !busy && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent" />}
+    </button>
   );
 }
 

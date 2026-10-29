@@ -1,5 +1,5 @@
 // ProductHub — write-back to Asana for backlog actions: complete / reopen a
-// task, and archive / unarchive it. "Archive" has no Asana equivalent, so it
+// task, archive / unarchive it, or delete it. "Archive" has no Asana equivalent, so it
 // moves the task into an "Archived" section of its project (created if the
 // project doesn't have one); unarchive moves it back to the project's first
 // other section. The browser applies the matching local change itself for
@@ -11,7 +11,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient } from '../_shared/authedClient.ts';
 import { asanaFetch, asanaWrite, ensureFreshToken, mapConcurrent } from '../_shared/asana.ts';
 
-type Action = 'complete' | 'reopen' | 'archive' | 'unarchive';
+type Action = 'complete' | 'reopen' | 'archive' | 'unarchive' | 'delete';
 interface Body {
   action: Action;
   itemIds: string[];
@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
-  if (!['complete', 'reopen', 'archive', 'unarchive'].includes(body.action) || !Array.isArray(body.itemIds)) {
+  if (!['complete', 'reopen', 'archive', 'unarchive', 'delete'].includes(body.action) || !Array.isArray(body.itemIds)) {
     return json({ error: 'Expected { action, itemIds }.' }, 400);
   }
 
@@ -83,6 +83,10 @@ Deno.serve(async (req) => {
 
       const done = await mapConcurrent(asanaItems, 3, async (item): Promise<Result> => {
         try {
+          if (body.action === 'delete') {
+            await asanaWrite(token, 'DELETE', `/tasks/${item.external_id}`);
+            return { id: item.id, status: 'ok' };
+          }
           if (body.action === 'complete' || body.action === 'reopen') {
             await asanaWrite(token, 'PUT', `/tasks/${item.external_id}`, { completed: body.action === 'complete' });
             return { id: item.id, status: 'ok' };

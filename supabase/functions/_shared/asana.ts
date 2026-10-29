@@ -139,14 +139,14 @@ export async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: 
 /** POST/PUT with a JSON {data} envelope — the write side of asanaFetch. */
 export async function asanaWrite(
   accessToken: string,
-  method: 'POST' | 'PUT',
+  method: 'POST' | 'PUT' | 'DELETE',
   path: string,
-  data: Record<string, unknown>,
+  data: Record<string, unknown> = {},
 ): Promise<unknown> {
   const res = await fetch(`${ASANA_API_BASE}${path}`, {
     method,
     headers: { Authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ data }),
+    ...(method === 'DELETE' ? {} : { body: JSON.stringify({ data }) }),
   });
   if (!res.ok) throw new Error(`Asana API error ${res.status}: ${await res.text()}`);
   const body = await res.json();
