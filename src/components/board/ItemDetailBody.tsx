@@ -5,9 +5,12 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Eyebrow } from '@/components/ui/Card';
 import { Tag, PriorityTag } from '@/components/ui/Tag';
 import { Segmented } from '@/components/ui/Segmented';
-import { useBoardItems, useItemNotes, useAddNote, useMoveItem, useUpdateItem, useBulkActions } from '@/features/board/hooks';
+import { useBoardItems, useItemNotes, useAddNote, useUpdateItem, useBulkActions } from '@/features/board/hooks';
 import { RicePopover } from '@/components/board/RicePopover';
 import { useAssigneeRoster } from '@/features/team';
+import { useModules } from '@/features/modules';
+import { detectModule, detectType } from '@/features/board/detect';
+import { classifyItems } from '@/features/ai';
 import type { BoardItem, ItemNote } from '@/features/board/types';
 import type { RequestType } from '@/types/domain';
 
@@ -19,10 +22,11 @@ import type { RequestType } from '@/types/domain';
  */
 export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: () => void }) {
   const { items } = useBoardItems();
+  const bulk = useBulkActions();
+  const [actionError, setActionError] = useState<string | null>(null);
   const item = items.find((i) => i.id === itemId);
   const { notes } = useItemNotes(itemId);
   const addNote = useAddNote(itemId);
-  const move = useMoveItem();
   const [channel, setChannel] = useState<'internal' | 'external'>('internal');
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
@@ -63,13 +67,18 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-lg font-semibold tracking-tight leading-snug">{item.title}</h1>
           <button
-            onClick={() => !isReleased && move(item.id, 'released')}
-            disabled={isReleased}
-            className="inline-flex items-center gap-1.5 text-[12px] text-success font-medium hover:opacity-80 disabled:opacity-50 flex-shrink-0 mt-0.5"
+            onClick={() => {
+              setActionError(null);
+              (isReleased ? bulk.reopen([item.id]) : bulk.complete([item.id])).catch((e: unknown) =>
+                setActionError(e instanceof Error ? e.message : 'Action failed.'),
+              );
+            }}
+            className="inline-flex items-center gap-1.5 text-[12px] text-success font-medium hover:opacity-80 flex-shrink-0 mt-0.5"
           >
-            <Icon name="check" size={15} /> {isReleased ? 'Completed' : 'Mark complete'}
+            <Icon name="check" size={15} /> {isReleased ? 'Completed · Reopen' : 'Mark complete'}
           </button>
         </div>
+        {actionError && <div className="text-[12px] text-danger mt-1">{actionError}</div>}
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           <PriorityTag priority={item.priority} />
           <Tag tone="pm">{statusLabel}</Tag>
@@ -84,6 +93,8 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
             dropdowns, Assignee from the team roster, Created as a date,
             RICE opens the same scoring popover as the Backlog list. */}
         <PrimaryFields key={item.id} item={item} />
+
+        <DetectBar item={item} />
 
         {/* Default task fields — available on every item regardless of
             source, editable inline. */}
@@ -158,6 +169,72 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/** Adds a field to the item's hand-edited set so sync/auto-detection stops overwriting it. */
+function withLock(item: BoardItem, field: 'type' | 'module'): string[] {
+  return [...new Set([...(item.lockedFields ?? []), field])];
+}
+
+/** Re-detect Type + Module from the title/body: rules (instant) or Claude (optional, needs the AI backend). */
+function DetectBar({ item }: { item: BoardItem }) {
+  const updateItem = useUpdateItem();
+  const { modules } = useModules();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  function runRules() {
+    const type = detectType(item.title, item.description);
+    const mod = detectModule(item.title, item.description ?? '', modules);
+    if (!type && !mod) {
+      setMessage('Nothing detected from the title or description.');
+      return;
+    }
+    // Clears the hand-edit lock — re-detecting is an explicit "go back to automatic".
+    updateItem(item.id, {
+      ...(type ? { type } : {}),
+      ...(mod ? { module: mod } : {}),
+      lockedFields: (item.lockedFields ?? []).filter((f) => f !== 'type' && f !== 'module'),
+    });
+    setMessage(`Detected ${[type, mod].filter(Boolean).join(' · ')}.`);
+  }
+
+  async function runAi() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const [r] = await classifyItems(
+        [{ id: item.id, title: item.title, ...(item.description ? { body: item.description } : {}) }],
+        modules.map((m) => m.name),
+      );
+      if (!r || (!r.type && !r.module)) {
+        setMessage('AI found nothing to change.');
+        return;
+      }
+      await updateItem(item.id, {
+        ...(r.type ? { type: r.type } : {}),
+        ...(r.module ? { module: r.module } : {}),
+        lockedFields: [...new Set([...(item.lockedFields ?? []), ...(r.type ? ['type'] : []), ...(r.module ? ['module'] : [])])],
+      });
+      setMessage(`AI: ${[r.type, r.module].filter(Boolean).join(' · ')}.`);
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : 'AI detection failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-2 text-[12px] text-label flex-wrap">
+      <span>Detect type &amp; module:</span>
+      <button type="button" onClick={runRules} className="text-accent font-medium hover:opacity-80">From title</button>
+      <span>·</span>
+      <button type="button" onClick={runAi} disabled={busy} className="text-accent font-medium hover:opacity-80 disabled:opacity-50">
+        {busy ? 'Asking AI…' : 'With AI'}
+      </button>
+      {message && <span className="text-body">{message}</span>}
+    </div>
+  );
+}
+
 const fieldInputClass =
   'w-full text-[13px] bg-transparent outline-none border-b-[0.5px] border-transparent hover:border-hairline focus:border-accent pb-0.5';
 
@@ -190,7 +267,9 @@ function PrimaryFields({ item }: { item: BoardItem }) {
         <Eyebrow>Type</Eyebrow>
         <select
           value={item.type}
-          onChange={(e) => updateItem(item.id, { type: e.target.value as RequestType })}
+          onChange={(e) =>
+            updateItem(item.id, { type: e.target.value as RequestType, lockedFields: withLock(item, 'type') })
+          }
           className={fieldInputClass}
         >
           {TYPE_OPTIONS.map((t) => (
@@ -218,18 +297,15 @@ function PrimaryFields({ item }: { item: BoardItem }) {
           className={fieldInputClass}
         />
       </div>
-      <div className="flex flex-col gap-1 relative">
+      <div className="flex flex-col gap-1">
         <Eyebrow>RICE</Eyebrow>
         <button type="button" onClick={() => setShowRice((v) => !v)} className={clsx(fieldInputClass, 'text-left')}>
           {item.riceScore != null ? item.riceScore.toFixed(1) : '—'}
         </button>
-        {/* align="right": the RICE field sits in the panel's right-hand
-            column, close to the panel's own right edge — a left-hung
-            popover would overflow off-screen, so it hangs from the right
-            instead (the same reasoning that makes "left" correct for the
-            wide Backlog table, inverted for this narrow panel). */}
-        {showRice && <RicePopover item={item} onClose={() => setShowRice(false)} align="right" />}
       </div>
+      {/* Inline (not a popover): the panel scrolls, so an absolutely
+          positioned popover could be clipped or hang off-screen. */}
+      {showRice && <RicePopover item={item} onClose={() => setShowRice(false)} variant="inline" />}
     </div>
   );
 }
@@ -240,9 +316,9 @@ function PrimaryFields({ item }: { item: BoardItem }) {
  * to a different item instead of carrying stale values over. */
 function DefaultFields({ item }: { item: BoardItem }) {
   const updateItem = useUpdateItem();
+  const { modules } = useModules();
   const [estimatedHours, setEstimatedHours] = useState(item.estimatedHours != null ? String(item.estimatedHours) : '');
   const [customerName, setCustomerName] = useState(item.customerName ?? '');
-  const [module, setModule] = useState(item.module ?? '');
   const [tagsText, setTagsText] = useState((item.tags ?? []).join(', '));
 
   function saveEstimatedHours() {
@@ -252,9 +328,6 @@ function DefaultFields({ item }: { item: BoardItem }) {
   }
   function saveCustomerName() {
     updateItem(item.id, { customerName: customerName.trim() || null });
-  }
-  function saveModule() {
-    updateItem(item.id, { module: module.trim() || null });
   }
   function saveTags() {
     const tags = tagsText.split(',').map((t) => t.trim()).filter(Boolean);
@@ -288,13 +361,20 @@ function DefaultFields({ item }: { item: BoardItem }) {
       </div>
       <div className="flex flex-col gap-1">
         <Eyebrow>Module</Eyebrow>
-        <input
-          value={module}
-          onChange={(e) => setModule(e.target.value)}
-          onBlur={saveModule}
-          placeholder="—"
+        <select
+          value={item.module ?? ''}
+          onChange={(e) =>
+            updateItem(item.id, { module: e.target.value || null, lockedFields: withLock(item, 'module') })
+          }
           className={fieldInputClass}
-        />
+        >
+          <option value="">None</option>
+          {/* A value synced from Asana that isn't in the catalog yet stays selectable. */}
+          {item.module && !modules.some((m) => m.name === item.module) && <option value={item.module}>{item.module}</option>}
+          {modules.map((m) => (
+            <option key={m.id} value={m.name}>{m.parentId ? '— ' : ''}{m.name}</option>
+          ))}
+        </select>
       </div>
       <div className="flex flex-col gap-1">
         <Eyebrow>Tags</Eyebrow>

@@ -4,6 +4,7 @@ export interface BoardItem {
   id: string;
   ref: string;
   title: string;
+  description?: string;
   type: RequestType;
   boardStatus: BoardStatus;
   priority: Priority;
@@ -24,6 +25,9 @@ export interface BoardItem {
   customerName?: string;
   module?: string;
   tags?: string[];
+  externalSource?: string; // 'asana' for synced items
+  archivedAt?: string;
+  lockedFields?: string[]; // fields edited by hand ('type', 'module') — sync/detection leave them alone
 }
 
 export interface ItemNote {

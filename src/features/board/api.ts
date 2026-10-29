@@ -14,6 +14,7 @@ interface ItemRow {
   id: string;
   ref: string;
   title: string;
+  description: string | null;
   type: RequestType;
   board_status: BoardStatus;
   priority: Priority;
@@ -27,8 +28,12 @@ interface ItemRow {
   plan_bucket: string | null;
   created_at: string | null;
   assignee_id: string | null;
+  assignee_member_id: string | null;
   assignee: { name: string } | null;
   external_assignee_name: string | null;
+  external_source: string | null;
+  archived_at: string | null;
+  locked_fields: string[] | null;
   custom_fields: Record<string, string> | null;
   estimated_hours: number | null;
   customer_name: string | null;
@@ -37,7 +42,7 @@ interface ItemRow {
 }
 
 const ITEM_SELECT =
-  'id, ref, title, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee_id, external_assignee_name, custom_fields, estimated_hours, customer_name, module, tags, assignee:profiles!backlog_items_assignee_id_fkey(name)';
+  'id, ref, title, description, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee_id, assignee_member_id, external_assignee_name, external_source, archived_at, locked_fields, custom_fields, estimated_hours, customer_name, module, tags, assignee:team_members!backlog_items_assignee_member_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const [{ data, error }, { data: defs, error: defsError }] = await Promise.all([
@@ -51,13 +56,13 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     id: r.id,
     ref: r.ref,
     title: r.title,
+    ...(r.description ? { description: r.description } : {}),
     type: r.type,
     boardStatus: r.board_status,
     priority: r.priority,
-    ...(r.assignee_id ? { assigneeId: r.assignee_id } : {}),
-    // Falls back to the Asana assignee's name when no workspace member's
-    // email matched — keeps the owner visible instead of silently dropping
-    // it, even though there's no local profile to link to.
+    ...(r.assignee_member_id ? { assigneeId: r.assignee_member_id } : {}),
+    // Falls back to the raw Asana assignee name for items synced before the
+    // team roster existed (or when Asana gave no assignee identity).
     assigneeName: r.assignee?.name ?? r.external_assignee_name ?? undefined,
     assigneeInitials: initials(r.assignee?.name ?? r.external_assignee_name),
     ...(r.source_request_id ? { sourceRequestId: r.source_request_id } : {}),
@@ -80,6 +85,9 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     ...(r.customer_name ? { customerName: r.customer_name } : {}),
     ...(r.module ? { module: r.module } : {}),
     ...(r.tags && r.tags.length > 0 ? { tags: r.tags } : {}),
+    ...(r.external_source ? { externalSource: r.external_source } : {}),
+    ...(r.archived_at ? { archivedAt: r.archived_at } : {}),
+    ...(r.locked_fields && r.locked_fields.length > 0 ? { lockedFields: r.locked_fields } : {}),
   }));
 }
 
@@ -145,8 +153,20 @@ export async function bulkUpdateBoardStatus(ids: string[], status: BoardStatus):
   if (error) throw error;
 }
 
-export async function bulkAssign(ids: string[], assigneeId: string | null): Promise<void> {
-  const { error } = await supabase.from('backlog_items').update({ assignee_id: assigneeId }).in('id', ids);
+/** Assign to a roster member; assignee_id (profile) is kept in step for members who have a login. */
+export async function bulkAssign(ids: string[], memberId: string | null, profileId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('backlog_items')
+    .update({ assignee_member_id: memberId, assignee_id: profileId, external_assignee_name: null })
+    .in('id', ids);
+  if (error) throw error;
+}
+
+export async function bulkSetArchived(ids: string[], archived: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('backlog_items')
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .in('id', ids);
   if (error) throw error;
 }
 
@@ -220,6 +240,7 @@ export interface NewItemDraft {
   type: RequestType;
   priority: Priority;
   swimlane?: string;
+  module?: string;
 }
 
 /** Directly create a backlog item (PM/Manager/Developer authoring a task,
@@ -240,6 +261,7 @@ export async function createBoardItem(
       board_status: 'triaged',
       plan_bucket: 'backlog',
       ...(draft.swimlane ? { swimlane: draft.swimlane } : {}),
+      ...(draft.module ? { module: draft.module } : {}),
     })
     .select(ITEM_SELECT)
     .single();

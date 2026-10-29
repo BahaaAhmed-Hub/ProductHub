@@ -55,6 +55,8 @@ export const NAV: Record<Role, NavSection[]> = {
         { label: 'Sprint / Cycles', icon: 'sprint', path: '/sprints' },
         { label: 'Swimlanes', icon: 'view_week', path: '/swimlanes' },
         { label: 'Automations', icon: 'bolt', path: '/automations' },
+        { label: 'Modules', icon: 'widgets', path: '/modules' },
+        { label: 'Team roster', icon: 'groups', path: '/roster' },
       ],
     },
     {
@@ -89,6 +91,8 @@ export const NAV: Record<Role, NavSection[]> = {
         { label: 'Sprint / Cycles', icon: 'sprint', path: '/sprints' },
         { label: 'Swimlanes', icon: 'view_week', path: '/swimlanes' },
         { label: 'Automations', icon: 'bolt', path: '/automations' },
+        { label: 'Modules', icon: 'widgets', path: '/modules' },
+        { label: 'Team roster', icon: 'groups', path: '/roster' },
       ],
     },
     {

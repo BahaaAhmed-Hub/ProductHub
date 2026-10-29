@@ -94,8 +94,12 @@ function AsanaCard() {
     setError(null);
     setSyncNote(null);
     try {
-      const { imported, total, commentsImported } = await actions.sync(projectGid);
-      setSyncNote(`Synced ${imported} of ${total} tasks, ${commentsImported} comments.`);
+      const { imported, total, commentsImported, membersCreated } = await actions.sync(projectGid);
+      setSyncNote(
+        `Synced ${imported} of ${total} tasks, ${commentsImported} comments` +
+          (membersCreated > 0 ? `, ${membersCreated} new team member${membersCreated === 1 ? '' : 's'}` : '') +
+          '. Created dates now match Asana.',
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed.');
     } finally {

@@ -19,3 +19,24 @@ export async function summarizeFeedback(feedback = SAMPLE_FEEDBACK): Promise<str
   if (data?.error) throw new Error(data.error);
   return data?.summary ?? '';
 }
+
+export interface ClassifyResult {
+  id: string;
+  type: 'bug' | 'feature' | 'query' | 'request' | null;
+  module: string | null;
+}
+
+/** Ask Claude (ai-classify Edge Function) for each task's type + module. */
+export async function classifyItems(
+  items: { id: string; title: string; body?: string }[],
+  modules: string[],
+  suggestNew = false,
+): Promise<ClassifyResult[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error('AI detection requires the deployed backend (Supabase + ANTHROPIC_API_KEY).');
+  }
+  const { data, error } = await supabase.functions.invoke('ai-classify', { body: { items, modules, suggestNew } });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return (data?.results ?? []) as ClassifyResult[];
+}
