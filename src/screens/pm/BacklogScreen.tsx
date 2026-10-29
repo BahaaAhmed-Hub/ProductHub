@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import clsx from 'clsx';
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
@@ -13,7 +13,7 @@ import { NewItemDialog } from '@/components/board/NewItemDialog';
 import { RicePopover } from '@/components/board/RicePopover';
 import { useAssigneeRoster } from '@/features/team';
 import type { BoardItem } from '@/features/board/types';
-import type { BoardStatus } from '@/types/domain';
+import type { BoardStatus, Priority, RequestType } from '@/types/domain';
 
 const PLAN_TONE: Record<string, 'neutral' | 'accent' | 'success'> = {
   backlog: 'neutral',
@@ -21,6 +21,52 @@ const PLAN_TONE: Record<string, 'neutral' | 'accent' | 'success'> = {
   in_cycle: 'success',
 };
 const PLAN_LABEL: Record<string, string> = { backlog: 'Backlog', planned: 'Planned', in_cycle: 'In Cycle' };
+
+const TYPE_OPTIONS: { value: RequestType; label: string }[] = [
+  { value: 'bug', label: 'Bug' },
+  { value: 'feature', label: 'Feature' },
+  { value: 'query', label: 'Query' },
+  { value: 'request', label: 'Request' },
+];
+const PRIORITY_OPTIONS: { value: Priority; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+];
+const PLAN_OPTIONS: { value: string; label: string }[] = [
+  { value: 'backlog', label: 'Backlog' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'in_cycle', label: 'In Cycle' },
+];
+const UNASSIGNED = '__unassigned__';
+
+interface Filters {
+  types: Set<RequestType>;
+  priorities: Set<Priority>;
+  plans: Set<string>;
+  assigneeIds: Set<string>;
+}
+const EMPTY_FILTERS: Filters = { types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set() };
+
+function filterCount(f: Filters): number {
+  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size;
+}
+
+function matchesFilters(item: BoardItem, f: Filters): boolean {
+  if (f.types.size > 0 && !f.types.has(item.type)) return false;
+  if (f.priorities.size > 0 && !f.priorities.has(item.priority)) return false;
+  if (f.plans.size > 0 && !f.plans.has(item.planBucket ?? '')) return false;
+  if (f.assigneeIds.size > 0 && !f.assigneeIds.has(item.assigneeId ?? UNASSIGNED)) return false;
+  return true;
+}
+
+function toggleIn<T>(set: Set<T>, value: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
 
 /** Screen 17 — PM backlog: list w/ inline RICE scoring, or kanban board. */
 export function BacklogScreen() {
@@ -30,6 +76,11 @@ export function BacklogScreen() {
   const [scoring, setScoring] = useState<string | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const filteredItems = useMemo(() => items.filter((i) => matchesFilters(i, filters)), [items, filters]);
+  const activeFilterCount = filterCount(filters);
 
   function toggle(id: string) {
     setSelected((s) => {
@@ -40,7 +91,7 @@ export function BacklogScreen() {
     });
   }
   function toggleAll() {
-    setSelected((s) => (s.size === items.length ? new Set() : new Set(items.map((i) => i.id))));
+    setSelected((s) => (s.size === filteredItems.length ? new Set() : new Set(filteredItems.map((i) => i.id))));
   }
 
   return (
@@ -65,10 +116,24 @@ export function BacklogScreen() {
         <div className="flex items-center justify-between mb-4 flex-shrink-0">
           <div className="flex items-baseline gap-2">
             <h1 className="text-lg font-semibold tracking-tight">Backlog</h1>
-            <span className="text-xs text-label">{items.length} items</span>
+            <span className="text-xs text-label">
+              {activeFilterCount > 0 ? `${filteredItems.length} of ${items.length} items` : `${items.length} items`}
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" icon="tune">Filter</Button>
+            <div className="relative">
+              <Button
+                variant="secondary"
+                icon="tune"
+                onClick={() => setShowFilters((s) => !s)}
+                className={activeFilterCount > 0 ? 'border-accent text-accent' : undefined}
+              >
+                Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+              </Button>
+              {showFilters && (
+                <FilterPopover filters={filters} onChange={setFilters} onClose={() => setShowFilters(false)} />
+              )}
+            </div>
             <Button icon="add" onClick={() => setShowNewItem(true)}>New item</Button>
           </div>
         </div>
@@ -95,9 +160,18 @@ export function BacklogScreen() {
           </div>
         )}
 
-        {!isLoading && items.length > 0 && view === 'list' && (
+        {!isLoading && items.length > 0 && filteredItems.length === 0 && (
+          <div className="max-w-md rounded-frame border border-dashed border-hairline p-8 text-center">
+            <div className="text-sm font-medium">No items match these filters</div>
+            <button className="text-accent text-[13px] mt-3" onClick={() => setFilters(EMPTY_FILTERS)}>
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {!isLoading && filteredItems.length > 0 && view === 'list' && (
           <ListView
-            items={items}
+            items={filteredItems}
             scoring={scoring}
             setScoring={setScoring}
             onOpen={openItem}
@@ -106,7 +180,7 @@ export function BacklogScreen() {
             onToggleAll={toggleAll}
           />
         )}
-        {!isLoading && items.length > 0 && view === 'board' && <BoardView items={items} onOpen={openItem} />}
+        {!isLoading && filteredItems.length > 0 && view === 'board' && <BoardView items={filteredItems} onOpen={openItem} />}
       </div>
 
       {showNewItem && <NewItemDialog onClose={() => setShowNewItem(false)} />}
@@ -228,6 +302,110 @@ function AssigneePicker({
         ))}
       </div>
     </>
+  );
+}
+
+function FilterPopover({
+  filters,
+  onChange,
+  onClose,
+}: {
+  filters: Filters;
+  onChange: (f: Filters) => void;
+  onClose: () => void;
+}) {
+  const roster = useAssigneeRoster();
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute right-0 top-11 z-50 w-[280px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop p-4 flex flex-col gap-3.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] font-semibold">Filter</span>
+          <button className="text-[11.5px] text-accent font-medium" onClick={() => onChange(EMPTY_FILTERS)}>
+            Clear all
+          </button>
+        </div>
+
+        <FilterSection label="Type">
+          {TYPE_OPTIONS.map((t) => (
+            <FilterChip
+              key={t.value}
+              active={filters.types.has(t.value)}
+              onClick={() => onChange({ ...filters, types: toggleIn(filters.types, t.value) })}
+            >
+              {t.label}
+            </FilterChip>
+          ))}
+        </FilterSection>
+
+        <FilterSection label="Priority">
+          {PRIORITY_OPTIONS.map((p) => (
+            <FilterChip
+              key={p.value}
+              active={filters.priorities.has(p.value)}
+              onClick={() => onChange({ ...filters, priorities: toggleIn(filters.priorities, p.value) })}
+            >
+              {p.label}
+            </FilterChip>
+          ))}
+        </FilterSection>
+
+        <FilterSection label="Plan">
+          {PLAN_OPTIONS.map((p) => (
+            <FilterChip
+              key={p.value}
+              active={filters.plans.has(p.value)}
+              onClick={() => onChange({ ...filters, plans: toggleIn(filters.plans, p.value) })}
+            >
+              {p.label}
+            </FilterChip>
+          ))}
+        </FilterSection>
+
+        <FilterSection label="Assignee">
+          <FilterChip
+            active={filters.assigneeIds.has(UNASSIGNED)}
+            onClick={() => onChange({ ...filters, assigneeIds: toggleIn(filters.assigneeIds, UNASSIGNED) })}
+          >
+            Unassigned
+          </FilterChip>
+          {roster.map((m) => (
+            <FilterChip
+              key={m.id}
+              active={filters.assigneeIds.has(m.id)}
+              onClick={() => onChange({ ...filters, assigneeIds: toggleIn(filters.assigneeIds, m.id) })}
+            >
+              {m.name}
+            </FilterChip>
+          ))}
+          {roster.length === 0 && <span className="text-[12px] text-label">No team members found.</span>}
+        </FilterSection>
+      </div>
+    </>
+  );
+}
+
+function FilterSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-eyebrow font-medium uppercase text-label">{label}</span>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  );
+}
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'h-7 px-2.5 rounded-full border text-[12px] font-medium transition-colors',
+        active ? 'bg-navy text-white border-navy' : 'bg-surface text-body border-hairline hover:bg-[#F4F3F0]',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
