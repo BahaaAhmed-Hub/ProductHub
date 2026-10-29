@@ -41,20 +41,15 @@ const PLAN_OPTIONS: { value: string; label: string }[] = [
 ];
 const UNASSIGNED = '__unassigned__';
 
-type Period = 'last7' | 'last30' | 'last90' | 'thisYear';
-const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: 'last7', label: 'Last 7 days' },
-  { value: 'last30', label: 'Last 30 days' },
-  { value: 'last90', label: 'Last 90 days' },
-  { value: 'thisYear', label: 'This year' },
-];
+/** "YYYY-MM-DD" (from a date input) as a local-time Date at the start or end of that day. */
+function dayBoundary(value: string, end: boolean): Date {
+  const [y = 0, m = 1, d = 1] = value.split('-').map(Number);
+  return end ? new Date(y, m - 1, d, 23, 59, 59, 999) : new Date(y, m - 1, d);
+}
 
-/** Earliest createdAt a period admits — "created on or after this date". */
-function periodCutoff(period: Period): Date {
-  const now = new Date();
-  if (period === 'thisYear') return new Date(now.getFullYear(), 0, 1);
-  const days = period === 'last7' ? 7 : period === 'last30' ? 30 : 90;
-  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+function formatCreated(iso?: string): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 interface Filters {
@@ -62,17 +57,16 @@ interface Filters {
   priorities: Set<Priority>;
   plans: Set<string>;
   assigneeIds: Set<string>;
-  // Single-select, unlike the Sets above — "created in the last 30 days"
-  // and "created in the last 90 days" aren't something you'd ever want
-  // combined, so this is one active period or none rather than a Set.
-  period: Period | null;
+  // Created-date range picked from date inputs; either end may be empty.
+  createdFrom: string;
+  createdTo: string;
 }
 const EMPTY_FILTERS: Filters = {
-  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), period: null,
+  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), createdFrom: '', createdTo: '',
 };
 
 function filterCount(f: Filters): number {
-  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.period ? 1 : 0);
+  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.createdFrom ? 1 : 0) + (f.createdTo ? 1 : 0);
 }
 
 function matchesFilters(item: BoardItem, f: Filters): boolean {
@@ -80,8 +74,11 @@ function matchesFilters(item: BoardItem, f: Filters): boolean {
   if (f.priorities.size > 0 && !f.priorities.has(item.priority)) return false;
   if (f.plans.size > 0 && !f.plans.has(item.planBucket ?? '')) return false;
   if (f.assigneeIds.size > 0 && !f.assigneeIds.has(item.assigneeId ?? UNASSIGNED)) return false;
-  if (f.period) {
-    if (!item.createdAt || new Date(item.createdAt) < periodCutoff(f.period)) return false;
+  if (f.createdFrom || f.createdTo) {
+    if (!item.createdAt) return false;
+    const created = new Date(item.createdAt);
+    if (f.createdFrom && created < dayBoundary(f.createdFrom, false)) return false;
+    if (f.createdTo && created > dayBoundary(f.createdTo, true)) return false;
   }
   return true;
 }
@@ -353,15 +350,26 @@ function FilterPopover({
         </div>
 
         <FilterSection label="Created">
-          {PERIOD_OPTIONS.map((p) => (
-            <FilterChip
-              key={p.value}
-              active={filters.period === p.value}
-              onClick={() => onChange({ ...filters, period: filters.period === p.value ? null : p.value })}
-            >
-              {p.label}
-            </FilterChip>
-          ))}
+          <label className="flex items-center gap-1.5 text-[12px] text-body">
+            From
+            <input
+              type="date"
+              value={filters.createdFrom}
+              max={filters.createdTo || undefined}
+              onChange={(e) => onChange({ ...filters, createdFrom: e.target.value })}
+              className="h-7 px-2 rounded-control border border-hairline bg-surface text-[12px] text-ink"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-[12px] text-body">
+            To
+            <input
+              type="date"
+              value={filters.createdTo}
+              min={filters.createdFrom || undefined}
+              onChange={(e) => onChange({ ...filters, createdTo: e.target.value })}
+              className="h-7 px-2 rounded-control border border-hairline bg-surface text-[12px] text-ink"
+            />
+          </label>
         </FilterSection>
 
         <FilterSection label="Type">
@@ -468,7 +476,7 @@ function ListView({
 
   return (
     <div className="bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame overflow-visible">
-      <div className="grid grid-cols-[28px_92px_1fr_84px_90px_70px_90px] gap-3 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline items-center">
+      <div className="grid grid-cols-[28px_92px_1fr_84px_90px_100px_70px_90px] gap-3 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline items-center">
         <input
           type="checkbox"
           checked={allSelected}
@@ -478,13 +486,13 @@ function ListView({
           aria-label="Select all"
         />
         <span>Ref</span><span>Title</span><span>Type</span>
-        <span>Priority</span><span className="text-right">RICE</span><span className="text-right">Plan</span>
+        <span>Priority</span><span>Created</span><span className="text-right">RICE</span><span className="text-right">Plan</span>
       </div>
       {items.map((item) => (
         <div
           key={item.id}
           className={clsx(
-            'relative grid grid-cols-[28px_92px_1fr_84px_90px_70px_90px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 hover:bg-[#F7F7F5]',
+            'relative grid grid-cols-[28px_92px_1fr_84px_90px_100px_70px_90px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 hover:bg-[#F7F7F5]',
             selected.has(item.id) && 'bg-accent-bg hover:bg-accent-bg',
           )}
         >
@@ -501,6 +509,7 @@ function ListView({
           </span>
           <span><TypeTag type={item.type} /></span>
           <span><PriorityTag priority={item.priority} /></span>
+          <span className="text-[12px] text-body">{formatCreated(item.createdAt)}</span>
           <button
             className="text-[13px] font-mono font-semibold text-right hover:text-pm"
             onClick={() => setScoring(scoring === item.id ? null : item.id)}
