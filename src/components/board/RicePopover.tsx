@@ -2,30 +2,55 @@ import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Segmented';
-import { useUpdateRice } from '@/features/board/hooks';
+import { useUpdateItem } from '@/features/board/hooks';
 import type { BoardItem } from '@/features/board/types';
 
 const IMPACT = { Minimal: 0.5, Moderate: 1, Massive: 2 } as const;
 type ImpactKey = keyof typeof IMPACT;
 
-/** RICE score editor — a positioned popover, shared by the Backlog list
- * view (click the score cell) and the item detail panel (click the RICE
- * field). Caller positions it via a wrapping `relative`/`absolute` parent
- * and passes `align` to pick which corner it hangs from. */
+interface RiceInputs {
+  reach: number;
+  impact: ImpactKey;
+  confidence: number;
+  effort: number;
+}
+const DEFAULT_INPUTS: RiceInputs = { reach: 48, impact: 'Massive', confidence: 88, effort: 5 };
+
+/** Saved inputs live under score_inputs.rice (score_inputs is shared with
+ * the WSJF / MoSCoW screens, so the other keys must be preserved). */
+function savedInputs(item: BoardItem): RiceInputs {
+  const r = (item.scoreInputs?.rice ?? {}) as Partial<RiceInputs>;
+  return {
+    reach: typeof r.reach === 'number' ? r.reach : DEFAULT_INPUTS.reach,
+    impact: r.impact && r.impact in IMPACT ? r.impact : DEFAULT_INPUTS.impact,
+    confidence: typeof r.confidence === 'number' ? r.confidence : DEFAULT_INPUTS.confidence,
+    effort: typeof r.effort === 'number' ? r.effort : DEFAULT_INPUTS.effort,
+  };
+}
+
+/** RICE score editor, shared by the Backlog list view (click the score
+ * cell) and the item detail panel (click the RICE field). The default
+ * `popover` variant hangs absolutely from a `relative` parent (`align`
+ * picks the corner); `inline` renders in normal flow so it can't be clipped
+ * by the detail panel's scroll container. Opens with the item's saved
+ * inputs, not fixed defaults. */
 export function RicePopover({
   item,
   onClose,
   align = 'right',
+  variant = 'popover',
 }: {
   item: BoardItem;
   onClose: () => void;
   align?: 'left' | 'right';
+  variant?: 'popover' | 'inline';
 }) {
-  const updateRice = useUpdateRice();
-  const [reach, setReach] = useState(48);
-  const [impact, setImpact] = useState<ImpactKey>('Massive');
-  const [confidence, setConfidence] = useState(88);
-  const [effort, setEffort] = useState(5);
+  const updateItem = useUpdateItem();
+  const initial = savedInputs(item);
+  const [reach, setReach] = useState(initial.reach);
+  const [impact, setImpact] = useState<ImpactKey>(initial.impact);
+  const [confidence, setConfidence] = useState(initial.confidence);
+  const [effort, setEffort] = useState(initial.effort);
   const [saving, setSaving] = useState(false);
 
   const score = effort > 0 ? (reach * IMPACT[impact] * (confidence / 100)) / effort : 0;
@@ -33,7 +58,10 @@ export function RicePopover({
   async function save() {
     setSaving(true);
     try {
-      await updateRice(item.id, Number(score.toFixed(1)));
+      await updateItem(item.id, {
+        riceScore: Number(score.toFixed(1)),
+        scoreInputs: { ...(item.scoreInputs ?? {}), rice: { reach, impact, confidence, effort } },
+      });
       onClose();
     } finally {
       setSaving(false);
@@ -41,7 +69,13 @@ export function RicePopover({
   }
 
   return (
-    <div className={`absolute top-11 z-40 w-[300px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop p-4 ${align === 'right' ? 'right-2' : 'left-2'}`}>
+    <div
+      className={
+        variant === 'inline'
+          ? 'col-span-2 w-full bg-surface border-[0.5px] border-hairline rounded-frame p-4'
+          : `absolute top-11 z-40 w-[300px] bg-surface border-[0.5px] border-hairline rounded-frame shadow-pop p-4 ${align === 'right' ? 'right-2' : 'left-2'}`
+      }
+    >
       <div className="flex items-center justify-between mb-3">
         <span className="text-[13px] font-semibold">
           RICE Score · <span className="font-mono">{item.ref}</span>

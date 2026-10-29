@@ -218,18 +218,15 @@ function PrimaryFields({ item }: { item: BoardItem }) {
           className={fieldInputClass}
         />
       </div>
-      <div className="flex flex-col gap-1 relative">
+      <div className="flex flex-col gap-1">
         <Eyebrow>RICE</Eyebrow>
         <button type="button" onClick={() => setShowRice((v) => !v)} className={clsx(fieldInputClass, 'text-left')}>
           {item.riceScore != null ? item.riceScore.toFixed(1) : '—'}
         </button>
-        {/* align="right": the RICE field sits in the panel's right-hand
-            column, close to the panel's own right edge — a left-hung
-            popover would overflow off-screen, so it hangs from the right
-            instead (the same reasoning that makes "left" correct for the
-            wide Backlog table, inverted for this narrow panel). */}
-        {showRice && <RicePopover item={item} onClose={() => setShowRice(false)} align="right" />}
       </div>
+      {/* Inline (not a popover): the panel scrolls, so an absolutely
+          positioned popover could be clipped or hang off-screen. */}
+      {showRice && <RicePopover item={item} onClose={() => setShowRice(false)} variant="inline" />}
     </div>
   );
 }
