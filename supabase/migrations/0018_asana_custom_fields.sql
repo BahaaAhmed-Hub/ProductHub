@@ -32,4 +32,4 @@ alter table integration_field_mappings add column if not exists custom_field_def
 
 alter table integration_field_mappings drop constraint if exists integration_field_mappings_target_field_check;
 alter table integration_field_mappings add constraint integration_field_mappings_target_field_check
-  check (target_field in ('board_status', 'priority', 'type', 'description', 'custom', 'ignore'));
+  check (target_field in ('board_status', 'priority', 'type', 'description', 'custom', 'ignore')) not valid;

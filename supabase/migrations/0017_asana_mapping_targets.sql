@@ -3,6 +3,8 @@
 -- number, date, people, multi_enum) and built-in fields like due date —
 -- none of those have a dedicated ProductHub column to translate values
 -- into, so "append to description" is where they go.
+-- NOT VALID: the CI workflow replays every migration on each run, by which time rows
+-- use targets that only 0019 allows; 0019 re-adds the final, validated constraint.
 alter table integration_field_mappings drop constraint if exists integration_field_mappings_target_field_check;
 alter table integration_field_mappings add constraint integration_field_mappings_target_field_check
-  check (target_field in ('board_status', 'priority', 'type', 'description', 'ignore'));
+  check (target_field in ('board_status', 'priority', 'type', 'description', 'ignore')) not valid;
