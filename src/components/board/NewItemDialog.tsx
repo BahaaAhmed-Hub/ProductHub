@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { useCreateItem } from '@/features/board/hooks';
+import { useModules } from '@/features/modules';
+import { detectModule, detectType } from '@/features/board/detect';
 import type { Priority, RequestType } from '@/types/domain';
 
 const TYPE_OPTIONS: { value: RequestType; label: string }[] = [
@@ -18,6 +20,11 @@ export function NewItemDialog({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<RequestType>('feature');
   const [priority, setPriority] = useState<Priority>('medium');
+  const { modules } = useModules();
+  const [module, setModule] = useState('');
+  // Type/module follow the title until the person picks one themselves.
+  const [typeTouched, setTypeTouched] = useState(false);
+  const [moduleTouched, setModuleTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +33,7 @@ export function NewItemDialog({ onClose }: { onClose: () => void }) {
     setSaving(true);
     setError(null);
     try {
-      await createItem({ title: title.trim(), type, priority });
+      await createItem({ title: title.trim(), type, priority, ...(module ? { module } : {}) });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create item');
@@ -50,7 +57,12 @@ export function NewItemDialog({ onClose }: { onClose: () => void }) {
           <input
             autoFocus
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setTitle(next);
+              if (!typeTouched) setType(detectType(next) ?? 'feature');
+              if (!moduleTouched) setModule(detectModule(next, '', modules) ?? '');
+            }}
             onKeyDown={(e) => e.key === 'Enter' && onCreate()}
             placeholder="What needs to get done?"
             className="w-full h-10 mt-1 px-3 rounded-control border-[0.5px] border-hairline bg-surface text-sm outline-none focus:border-accent"
@@ -62,7 +74,7 @@ export function NewItemDialog({ onClose }: { onClose: () => void }) {
             <span className="text-eyebrow font-medium uppercase text-label">Type</span>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as RequestType)}
+              onChange={(e) => { setType(e.target.value as RequestType); setTypeTouched(true); }}
               className="w-full h-9 mt-1 px-2.5 rounded-control border-[0.5px] border-hairline bg-surface text-[13px] outline-none"
             >
               {TYPE_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -79,6 +91,18 @@ export function NewItemDialog({ onClose }: { onClose: () => void }) {
             </select>
           </label>
         </div>
+
+        <label className="block mb-4 -mt-1">
+          <span className="text-eyebrow font-medium uppercase text-label">Module</span>
+          <select
+            value={module}
+            onChange={(e) => { setModule(e.target.value); setModuleTouched(true); }}
+            className="w-full h-9 mt-1 px-2.5 rounded-control border-[0.5px] border-hairline bg-surface text-[13px] outline-none"
+          >
+            <option value="">None</option>
+            {modules.map((m) => <option key={m.id} value={m.name}>{m.parentId ? '— ' : ''}{m.name}</option>)}
+          </select>
+        </label>
 
         {error && <div className="text-xs text-danger mb-3">{error}</div>}
 

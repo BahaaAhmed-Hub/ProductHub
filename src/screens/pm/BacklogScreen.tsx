@@ -60,16 +60,19 @@ interface Filters {
   // Created-date range picked from date inputs; either end may be empty.
   createdFrom: string;
   createdTo: string;
+  // Archived tasks are hidden unless this is on, which shows only them.
+  archived: boolean;
 }
 const EMPTY_FILTERS: Filters = {
-  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), createdFrom: '', createdTo: '',
+  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), createdFrom: '', createdTo: '', archived: false,
 };
 
 function filterCount(f: Filters): number {
-  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.createdFrom ? 1 : 0) + (f.createdTo ? 1 : 0);
+  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.createdFrom ? 1 : 0) + (f.createdTo ? 1 : 0) + (f.archived ? 1 : 0);
 }
 
 function matchesFilters(item: BoardItem, f: Filters): boolean {
+  if (f.archived !== Boolean(item.archivedAt)) return false;
   if (f.types.size > 0 && !f.types.has(item.type)) return false;
   if (f.priorities.size > 0 && !f.priorities.has(item.priority)) return false;
   if (f.plans.size > 0 && !f.plans.has(item.planBucket ?? '')) return false;
@@ -93,7 +96,7 @@ function toggleIn<T>(set: Set<T>, value: T): Set<T> {
 /** Screen 17 — PM backlog: list w/ inline RICE scoring, or kanban board. */
 export function BacklogScreen() {
   const openItem = useItemPanel((s) => s.open);
-  const { items, isLoading } = useBoardItems();
+  const { items, isLoading } = useBoardItems({ includeArchived: true });
   const [view, setView] = useState<'list' | 'board'>('list');
   const [scoring, setScoring] = useState<string | null>(null);
   const [showNewItem, setShowNewItem] = useState(false);
@@ -102,6 +105,7 @@ export function BacklogScreen() {
   const [showFilters, setShowFilters] = useState(false);
 
   const filteredItems = useMemo(() => items.filter((i) => matchesFilters(i, filters)), [items, filters]);
+  const liveCount = useMemo(() => items.filter((i) => !i.archivedAt).length, [items]);
   const activeFilterCount = filterCount(filters);
 
   function toggle(id: string) {
@@ -139,7 +143,7 @@ export function BacklogScreen() {
           <div className="flex items-baseline gap-2">
             <h1 className="text-lg font-semibold tracking-tight">Backlog</h1>
             <span className="text-xs text-label">
-              {activeFilterCount > 0 ? `${filteredItems.length} of ${items.length} items` : `${items.length} items`}
+              {activeFilterCount > 0 ? `${filteredItems.length} of ${liveCount} items` : `${liveCount} items`}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -164,6 +168,7 @@ export function BacklogScreen() {
           <BulkActionBar
             count={selected.size}
             ids={[...selected]}
+            archivedView={filters.archived}
             onClear={() => setSelected(new Set())}
           />
         )}
@@ -210,7 +215,7 @@ export function BacklogScreen() {
   );
 }
 
-function BulkActionBar({ count, ids, onClear }: { count: number; ids: string[]; onClear: () => void }) {
+function BulkActionBar({ count, ids, archivedView, onClear }: { count: number; ids: string[]; archivedView: boolean; onClear: () => void }) {
   const bulk = useBulkActions();
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -253,12 +258,22 @@ function BulkActionBar({ count, ids, onClear }: { count: number; ids: string[]; 
         </>
       ) : (
         <>
+          {!archivedView && (
+            <button
+              className="flex items-center gap-1.5 text-[13px] px-2 h-7 rounded-md hover:bg-white/10 disabled:opacity-50"
+              disabled={busy !== null}
+              onClick={() => run('complete', () => bulk.complete(ids))}
+            >
+              <Icon name="check_circle" size={15} /> {busy === 'complete' ? 'Completing…' : 'Complete'}
+            </button>
+          )}
           <button
             className="flex items-center gap-1.5 text-[13px] px-2 h-7 rounded-md hover:bg-white/10 disabled:opacity-50"
             disabled={busy !== null}
-            onClick={() => run('complete', () => bulk.complete(ids))}
+            onClick={() => run('archive', () => (archivedView ? bulk.restore(ids) : bulk.archive(ids)))}
           >
-            <Icon name="check_circle" size={15} /> {busy === 'complete' ? 'Completing…' : 'Complete'}
+            <Icon name={archivedView ? 'unarchive' : 'inventory_2'} size={15} />{' '}
+            {busy === 'archive' ? (archivedView ? 'Restoring…' : 'Archiving…') : archivedView ? 'Restore' : 'Archive'}
           </button>
           <button
             className="flex items-center gap-1.5 text-[13px] px-2 h-7 rounded-md hover:bg-white/10"
@@ -270,7 +285,7 @@ function BulkActionBar({ count, ids, onClear }: { count: number; ids: string[]; 
             className="flex items-center gap-1.5 text-[13px] px-2 h-7 rounded-md hover:bg-white/10"
             onClick={() => setConfirmingDelete(true)}
           >
-            <Icon name="archive" size={15} /> Delete
+            <Icon name="delete" size={15} /> Delete
           </button>
         </>
       )}
@@ -372,6 +387,12 @@ function FilterPopover({
           </label>
         </FilterSection>
 
+        <FilterSection label="Archive">
+          <FilterChip active={filters.archived} onClick={() => onChange({ ...filters, archived: !filters.archived })}>
+            Show archived only
+          </FilterChip>
+        </FilterSection>
+
         <FilterSection label="Type">
           {TYPE_OPTIONS.map((t) => (
             <FilterChip
@@ -471,12 +492,15 @@ function ListView({
   onToggle: (id: string) => void;
   onToggleAll: () => void;
 }) {
+  const bulk = useBulkActions();
+  const [rowError, setRowError] = useState<string | null>(null);
   const allSelected = items.length > 0 && selected.size === items.length;
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
     <div className="bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame overflow-visible">
-      <div className="grid grid-cols-[28px_92px_1fr_84px_90px_100px_70px_90px] gap-3 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline items-center">
+      {rowError && <div className="px-4 py-2 text-[12px] text-danger border-b-[0.5px] border-hairline">{rowError}</div>}
+      <div className="grid grid-cols-[28px_24px_92px_1fr_84px_90px_100px_110px_36px_70px_90px] gap-3 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline items-center">
         <input
           type="checkbox"
           checked={allSelected}
@@ -485,14 +509,16 @@ function ListView({
           className="accent-navy"
           aria-label="Select all"
         />
+        <span aria-hidden />
         <span>Ref</span><span>Title</span><span>Type</span>
-        <span>Priority</span><span>Created</span><span className="text-right">RICE</span><span className="text-right">Plan</span>
+        <span>Priority</span><span>Created</span><span>Module</span><span>Who</span>
+        <span className="text-right">RICE</span><span className="text-right">Plan</span>
       </div>
       {items.map((item) => (
         <div
           key={item.id}
           className={clsx(
-            'relative grid grid-cols-[28px_92px_1fr_84px_90px_100px_70px_90px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 hover:bg-[#F7F7F5]',
+            'relative grid grid-cols-[28px_24px_92px_1fr_84px_90px_100px_110px_36px_70px_90px] gap-3 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 hover:bg-[#F7F7F5]',
             selected.has(item.id) && 'bg-accent-bg hover:bg-accent-bg',
           )}
         >
@@ -503,13 +529,33 @@ function ListView({
             className="accent-navy"
             aria-label={`Select ${item.ref}`}
           />
+          <button
+            aria-label={item.boardStatus === 'released' ? `Reopen ${item.ref}` : `Complete ${item.ref}`}
+            title={item.boardStatus === 'released' ? 'Completed — click to reopen' : 'Mark complete'}
+            className={clsx('flex items-center justify-center', item.boardStatus === 'released' ? 'text-success' : 'text-label hover:text-success')}
+            onClick={() => {
+              setRowError(null);
+              (item.boardStatus === 'released' ? bulk.reopen([item.id]) : bulk.complete([item.id])).catch((e: unknown) =>
+                setRowError(e instanceof Error ? e.message : 'Action failed.'),
+              );
+            }}
+          >
+            <Icon name={item.boardStatus === 'released' ? 'check_circle' : 'radio_button_unchecked'} size={18} />
+          </button>
           <span className="font-mono text-[11px] text-label">{item.ref}</span>
-          <span className="text-[13px] font-medium truncate cursor-pointer" onClick={() => onOpen(item.id)}>
+          <span
+            className={clsx('text-[13px] font-medium truncate cursor-pointer', item.boardStatus === 'released' && 'text-label line-through')}
+            onClick={() => onOpen(item.id)}
+          >
             {item.title}
           </span>
           <span><TypeTag type={item.type} /></span>
           <span><PriorityTag priority={item.priority} /></span>
           <span className="text-[12px] text-body">{formatCreated(item.createdAt)}</span>
+          <span className="text-[12px] text-body truncate" title={item.module}>{item.module ?? '—'}</span>
+          <span title={item.assigneeName}>
+            {item.assigneeInitials ? <Avatar initials={item.assigneeInitials} size={24} /> : <span className="text-label text-[12px]">—</span>}
+          </span>
           <button
             className="text-[13px] font-mono font-semibold text-right hover:text-pm"
             onClick={() => setScoring(scoring === item.id ? null : item.id)}

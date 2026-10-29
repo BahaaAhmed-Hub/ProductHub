@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { invoke } from '@/lib/edgeFunctions';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
 import {
   addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields,
-  listItemNotes, addItemNote, createBoardItem, bulkUpdateBoardStatus, bulkAssign, bulkDeleteItems,
+  listItemNotes, addItemNote, createBoardItem, bulkUpdateBoardStatus, bulkAssign, bulkDeleteItems, bulkSetArchived,
   type NewItemDraft,
 } from './api';
 import type { BoardItem, ItemNote, TriageRequest } from './types';
@@ -25,13 +26,17 @@ const COLMAP: Record<string, string> = {
   module: 'module',
   tags: 'tags',
   createdAt: 'created_at',
+  lockedFields: 'locked_fields',
+  archivedAt: 'archived_at',
 };
 
-export function useBoardItems(): { items: BoardItem[]; isLoading: boolean } {
+/** Archived items are hidden everywhere except where a caller asks for them (the Backlog's archive view). */
+export function useBoardItems(opts: { includeArchived?: boolean } = {}): { items: BoardItem[]; isLoading: boolean } {
   const mock = useBoardStore((s) => s.items);
   const q = useQuery({ queryKey: ['board'], queryFn: listBoardItems, enabled: isSupabaseConfigured });
-  if (isSupabaseConfigured) return { items: q.data ?? [], isLoading: q.isLoading };
-  return { items: mock, isLoading: false };
+  const all = isSupabaseConfigured ? (q.data ?? []) : mock;
+  const items = opts.includeArchived ? all : all.filter((i) => !i.archivedAt);
+  return { items, isLoading: isSupabaseConfigured ? q.isLoading : false };
 }
 
 export function useMoveItem() {
@@ -80,24 +85,64 @@ export function useUpdateItem() {
   };
 }
 
+type AsanaAction = 'complete' | 'reopen' | 'archive' | 'unarchive';
+
 /** Backlog multi-select actions — one round trip per action in real mode
- * (an .in('id', ids) update/delete), a loop over the mock store otherwise. */
+ * (an .in('id', ids) update/delete), a loop over the mock store otherwise.
+ * complete/reopen/archive/restore also write through to Asana for synced
+ * items (asana-action Edge Function) before changing anything locally: an
+ * item whose Asana update fails is left untouched here too, so the two
+ * sides never disagree. */
 export function useBulkActions() {
   const qc = useQueryClient();
   const mockMove = useBoardStore((s) => s.moveItem);
   const mockDelete = useBoardStore((s) => s.deleteItems);
   const mockAssign = useBoardStore((s) => s.bulkAssign);
+  const mockPatch = useBoardStore((s) => s.patch);
   const invalidate = () => qc.invalidateQueries({ queryKey: ['board'] });
 
+  /** Returns the ids that may be changed locally; throws after the local
+   * change is applied (by the caller) if some Asana updates failed. */
+  async function pushToAsana(action: AsanaAction, ids: string[]): Promise<{ okIds: string[]; failure?: string }> {
+    const known = qc.getQueryData<BoardItem[]>(['board']) ?? [];
+    const synced = ids.some((id) => known.find((i) => i.id === id)?.externalSource === 'asana');
+    if (!synced) return { okIds: ids };
+    const res = await invoke<{ results: { id: string; status: 'ok' | 'skipped' | 'error'; error?: string }[]; note?: string }>(
+      'asana-action',
+      { action, itemIds: ids },
+    );
+    const failed = res.results.filter((r) => r.status === 'error');
+    const failedIds = new Set(failed.map((r) => r.id));
+    return {
+      okIds: ids.filter((id) => !failedIds.has(id)),
+      ...(failed.length > 0
+        ? { failure: `${failed.length} task${failed.length === 1 ? '' : 's'} could not be updated in Asana (${failed[0]?.error ?? 'unknown error'}) and were left unchanged.` }
+        : res.note
+          ? { failure: res.note }
+          : {}),
+    };
+  }
+
+  async function viaAsana(action: AsanaAction, ids: string[], applyReal: (okIds: string[]) => Promise<void>, applyMock: (id: string) => void) {
+    if (isSupabaseConfigured) {
+      const { okIds, failure } = await pushToAsana(action, ids);
+      if (okIds.length > 0) await applyReal(okIds);
+      await invalidate();
+      if (failure) throw new Error(failure);
+      return;
+    }
+    ids.forEach(applyMock);
+  }
+
   return {
-    async complete(ids: string[]): Promise<void> {
-      if (isSupabaseConfigured) {
-        await bulkUpdateBoardStatus(ids, 'released');
-        await invalidate();
-        return;
-      }
-      ids.forEach((id) => mockMove(id, 'released'));
-    },
+    complete: (ids: string[]) =>
+      viaAsana('complete', ids, (ok) => bulkUpdateBoardStatus(ok, 'released'), (id) => mockMove(id, 'released')),
+    reopen: (ids: string[]) =>
+      viaAsana('reopen', ids, (ok) => bulkUpdateBoardStatus(ok, 'triaged'), (id) => mockMove(id, 'triaged')),
+    archive: (ids: string[]) =>
+      viaAsana('archive', ids, (ok) => bulkSetArchived(ok, true), (id) => mockPatch(id, { archivedAt: new Date().toISOString() })),
+    restore: (ids: string[]) =>
+      viaAsana('unarchive', ids, (ok) => bulkSetArchived(ok, false), (id) => mockPatch(id, { archivedAt: undefined })),
     async remove(ids: string[]): Promise<void> {
       if (isSupabaseConfigured) {
         await bulkDeleteItems(ids);
@@ -106,9 +151,12 @@ export function useBulkActions() {
       }
       mockDelete(ids);
     },
-    async assign(ids: string[], assignee: { id: string; name: string; initials: string } | null): Promise<void> {
+    async assign(
+      ids: string[],
+      assignee: { id: string; name: string; initials: string; profileId?: string | null } | null,
+    ): Promise<void> {
       if (isSupabaseConfigured) {
-        await bulkAssign(ids, assignee?.id ?? null);
+        await bulkAssign(ids, assignee?.id ?? null, assignee?.profileId ?? null);
         await invalidate();
         return;
       }

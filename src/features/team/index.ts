@@ -79,20 +79,89 @@ function initialsOf(name: string): string {
   return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 }
 
-/** The roster offered by any assignee picker (Backlog bulk-assign, item
- * detail panel) — active team members in real mode, or the fixture roster
- * already used by mock board items so the picker stays walkable without
- * Supabase configured. */
-export function useAssigneeRoster(): { id: string; name: string; initials: string }[] {
-  const { members } = useTeamMembers();
-  if (isSupabaseConfigured) {
-    return members.filter((m) => m.status === 'active').map((m) => ({ id: m.id, name: m.name, initials: initialsOf(m.name) }));
-  }
-  return [
-    { id: 'mock-ar', name: 'Amir R.', initials: 'AR' },
-    { id: 'mock-sk', name: 'Sara K.', initials: 'SK' },
-    { id: 'mock-dr', name: 'Devon R.', initials: 'DR' },
-  ];
+export interface RosterMember {
+  id: string;
+  name: string;
+  email?: string;
+  initials: string;
+  profileId?: string; // set when this person also has a ProductHub login
+  source: 'manual' | 'asana';
+}
+
+interface RosterRow {
+  id: string;
+  name: string;
+  email: string | null;
+  profile_id: string | null;
+  external_source: string | null;
+}
+
+/** The assignable team roster (team_members): people with a login, people
+ * added by hand, and people created by an Asana sync. */
+export function useTeamRoster(): { roster: RosterMember[]; isLoading: boolean } {
+  const q = useQuery({
+    queryKey: ['roster'],
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<RosterMember[]> => {
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('id, name, email, profile_id, external_source')
+        .order('name');
+      if (error) throw error;
+      return (data as RosterRow[]).map((r) => ({
+        id: r.id, name: r.name, initials: initialsOf(r.name),
+        ...(r.email ? { email: r.email } : {}),
+        ...(r.profile_id ? { profileId: r.profile_id } : {}),
+        source: r.external_source === 'asana' ? 'asana' : 'manual',
+      }));
+    },
+  });
+  if (!isSupabaseConfigured) return { roster: MOCK_ROSTER, isLoading: false };
+  return { roster: q.data ?? [], isLoading: q.isLoading };
+}
+
+// Fixture roster already used by mock board items, so pickers stay walkable without Supabase.
+const MOCK_ROSTER: RosterMember[] = [
+  { id: 'mock-ar', name: 'Amir R.', initials: 'AR', source: 'manual' },
+  { id: 'mock-sk', name: 'Sara K.', initials: 'SK', source: 'manual' },
+  { id: 'mock-dr', name: 'Devon R.', initials: 'DR', source: 'manual' },
+];
+
+/** The list offered by any assignee picker (Backlog bulk-assign, item detail panel). */
+export function useAssigneeRoster(): { id: string; name: string; initials: string; profileId?: string }[] {
+  return useTeamRoster().roster;
+}
+
+export function useRosterActions() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['roster'] }), qc.invalidateQueries({ queryKey: ['board'] })]);
+  return {
+    async add(name: string, email: string): Promise<void> {
+      if (!isSupabaseConfigured) throw new Error('Team roster requires the deployed backend (Supabase).');
+      if (!user) throw new Error('Not authenticated');
+      const n = name.trim();
+      if (!n) throw new Error('Name is required.');
+      const { error } = await supabase
+        .from('team_members')
+        .insert({ workspace_id: user.workspaceId, name: n, email: email.trim() || null });
+      if (error) throw error;
+      await refresh();
+    },
+    async update(id: string, name: string, email: string): Promise<void> {
+      const n = name.trim();
+      if (!n) throw new Error('Name is required.');
+      const { error } = await supabase.from('team_members').update({ name: n, email: email.trim() || null }).eq('id', id);
+      if (error) throw error;
+      await refresh();
+    },
+    async remove(id: string): Promise<void> {
+      // backlog_items.assignee_member_id is ON DELETE SET NULL — their tasks become unassigned.
+      const { error } = await supabase.from('team_members').delete().eq('id', id);
+      if (error) throw error;
+      await refresh();
+    },
+  };
 }
 
 export function useChangeMemberRole() {

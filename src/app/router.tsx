@@ -22,6 +22,8 @@ import { MySLAScreen } from '@/screens/developer/MySLAScreen';
 import { BacklogScreen } from '@/screens/pm/BacklogScreen';
 import { RoadmapScreen } from '@/screens/pm/RoadmapScreen';
 import { AutomationsScreen } from '@/screens/pm/AutomationsScreen';
+import { ModulesScreen } from '@/screens/pm/ModulesScreen';
+import { RosterScreen } from '@/screens/pm/RosterScreen';
 import { PrioritizationHub } from '@/screens/pm/prioritization/PrioritizationHub';
 import { ValueEffortScreen } from '@/screens/pm/prioritization/ValueEffortScreen';
 import { MoscowScreen } from '@/screens/pm/prioritization/MoscowScreen';
@@ -128,6 +130,8 @@ export const router = createHashRouter([
               { path: '/sprints', element: <BoardScreen /> },
               { path: '/swimlanes', element: <SwimlanesScreen /> },
               { path: '/automations', element: <AutomationsScreen /> },
+              { path: '/modules', element: <ModulesScreen /> },
+              { path: '/roster', element: <RosterScreen /> },
               { path: '/analytics', element: <AnalyticsHome /> },
               { path: '/research', element: <ResearchHub /> },
               { path: '/prioritize', element: <PrioritizationHub /> },

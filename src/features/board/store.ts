@@ -48,6 +48,7 @@ export const useBoardStore = create<BoardState>((set) => ({
             priority: draft.priority,
             planBucket: 'backlog',
             ...(draft.swimlane ? { swimlane: draft.swimlane } : {}),
+            ...(draft.module ? { module: draft.module } : {}),
           },
           ...s.items,
         ],
