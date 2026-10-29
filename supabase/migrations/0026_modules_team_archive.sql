@@ -66,7 +66,8 @@ create table if not exists modules (
   description text not null default '',
   parent_id uuid references modules(id) on delete cascade,
   aliases text[] not null default '{}'::text[],
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (workspace_id, name)
 );
 create unique index if not exists modules_ws_name on modules(workspace_id, lower(name));
 

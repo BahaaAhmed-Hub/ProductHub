@@ -21,9 +21,11 @@
 import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient, requireManager } from '../_shared/authedClient.ts';
 import { asanaFetchAllPages, ensureFreshToken, mapConcurrent } from '../_shared/asana.ts';
+import { detectModule, detectType } from '../_shared/detect.ts';
 
 interface AsanaCustomFieldValue {
   gid: string;
+  name: string;
   enum_value: { name: string } | null;
   display_value: string | null;
 }
@@ -32,7 +34,8 @@ interface AsanaTask {
   name: string;
   notes: string | null;
   completed: boolean;
-  assignee: { name: string; email: string } | null;
+  created_at: string | null;
+  assignee: { gid: string; name: string; email: string | null } | null;
   memberships: { section: { name: string } | null }[];
   custom_fields: AsanaCustomFieldValue[];
   due_on: string | null;
@@ -89,6 +92,69 @@ function displayValue(t: AsanaTask, sourceField: string): string | undefined {
   }
 }
 
+// ---- Same-name auto-mapping ------------------------------------------------
+// With no explicit field mapping for a target, an Asana custom field whose
+// NAME matches the ProductHub field (Priority, Type, Module, Customer,
+// Estimated time, Status) is used directly, and its values are translated by
+// keyword. Explicit mappings always win.
+const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const FIELD_NAMES: Record<string, string[]> = {
+  priority: ['priority', 'severity', 'urgency'],
+  type: ['type', 'task type', 'issue type', 'ticket type', 'kind', 'category'],
+  status: ['status', 'stage', 'state', 'progress'],
+  module: ['module', 'component', 'area', 'feature area', 'product area'],
+  customer: ['customer', 'customer name', 'client', 'account'],
+  estimated: ['estimated time', 'estimated hours', 'estimate', 'estimation', 'time estimate'],
+};
+function namedField(t: AsanaTask, key: keyof typeof FIELD_NAMES): AsanaCustomFieldValue | undefined {
+  const names = FIELD_NAMES[key];
+  return t.custom_fields.find((c) => c.name && names.includes(norm(c.name)));
+}
+function priorityFrom(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const x = norm(v);
+  if (/^(critical|urgent|blocker|highest|p0|sev 1|severity 1)$/.test(x)) return 'critical';
+  if (/^(high|major|important|p1|sev 2|severity 2)$/.test(x)) return 'high';
+  if (/^(medium|normal|moderate|med|p2|sev 3|severity 3)$/.test(x)) return 'medium';
+  if (/^(low|minor|lowest|trivial|p3|p4|sev 4|severity 4)$/.test(x)) return 'low';
+  return undefined;
+}
+function typeFrom(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const x = norm(v);
+  if (/\b(bug|defect|incident|error)\b/.test(x)) return 'bug';
+  if (/\b(feature|enhancement|story|improvement|epic)\b/.test(x)) return 'feature';
+  if (/\brequest\b/.test(x)) return 'request';
+  if (/\b(query|question|inquiry)\b/.test(x)) return 'query';
+  return undefined;
+}
+function statusFrom(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const x = norm(v);
+  if (/\b(done|complete|completed|released|shipped|closed|resolved|deployed|live)\b/.test(x)) return 'released';
+  if (/\b(qa|test|testing|review|verify|verification|uat)\b/.test(x)) return 'in_qa';
+  if (/\b(progress|doing|dev|development|started|active|wip|building)\b/.test(x)) return 'in_development';
+  if (/\b(backlog|todo|to do|new|open|triage|triaged|planned|not started|inbox)\b/.test(x)) return 'triaged';
+  return undefined;
+}
+const ARCHIVED_SECTION = /^archived?$/i;
+
+interface TeamRow {
+  id: string;
+  name: string;
+  email: string | null;
+  profile_id: string | null;
+  external_id: string | null;
+}
+interface ExistingRow {
+  external_id: string;
+  type: string;
+  module: string | null;
+  locked_fields: string[] | null;
+  archived_at: string | null;
+  created_at: string;
+}
+
 interface Body {
   projectGid: string;
 }
@@ -131,12 +197,12 @@ Deno.serve(async (req) => {
   try {
     const accessToken = await ensureFreshToken(supabase, connection);
 
-    const [tasks, mappingRows, profileRows] = await Promise.all([
+    const [tasks, mappingRows, profileRows, moduleRows, memberRows, existingRows] = await Promise.all([
       asanaFetchAllPages<AsanaTask>(
         accessToken,
         `/projects/${project.external_project_gid}/tasks` +
-          `?opt_fields=name,notes,completed,assignee.name,assignee.email,memberships.section.name,` +
-          `custom_fields.gid,custom_fields.enum_value.name,custom_fields.display_value,` +
+          `?opt_fields=name,notes,completed,created_at,assignee.gid,assignee.name,assignee.email,memberships.section.name,` +
+          `custom_fields.gid,custom_fields.name,custom_fields.enum_value.name,custom_fields.display_value,` +
           `due_on,start_on,tags.name,permalink_url&limit=100`,
       ),
       supabase
@@ -150,6 +216,22 @@ Deno.serve(async (req) => {
         .select('id, email')
         .eq('workspace_id', caller.workspaceId)
         .then((r) => (r.data ?? []) as { id: string; email: string }[]),
+      supabase
+        .from('modules')
+        .select('name, aliases')
+        .eq('workspace_id', caller.workspaceId)
+        .then((r) => (r.data ?? []) as { name: string; aliases: string[] | null }[]),
+      supabase
+        .from('team_members')
+        .select('id, name, email, profile_id, external_id')
+        .eq('workspace_id', caller.workspaceId)
+        .then((r) => (r.data ?? []) as TeamRow[]),
+      supabase
+        .from('backlog_items')
+        .select('external_id, type, module, locked_fields, archived_at, created_at')
+        .eq('workspace_id', caller.workspaceId)
+        .eq('external_source', 'asana')
+        .then((r) => (r.data ?? []) as ExistingRow[]),
     ]);
 
     const enumMappings = mappingRows.filter((m) => ['board_status', 'priority', 'type'].includes(m.target_field));
@@ -173,7 +255,61 @@ Deno.serve(async (req) => {
       return found;
     }
 
+    // ---- Team: every Asana assignee becomes a roster member -----------------
+    // Match an existing member by Asana gid, then email, then exact name (so
+    // someone already added by hand or with a login isn't duplicated); create
+    // whoever is missing. Their tasks are linked to the member below.
+    const memberByGid = new Map<string, TeamRow>();
+    const memberByEmail = new Map<string, TeamRow>();
+    const memberByName = new Map<string, TeamRow>();
+    for (const m of memberRows) {
+      if (m.external_id) memberByGid.set(m.external_id, m);
+      if (m.email) memberByEmail.set(m.email.toLowerCase(), m);
+      memberByName.set(m.name.trim().toLowerCase(), m);
+    }
+    const assignees = new Map<string, { gid: string; name: string; email: string | null }>();
+    for (const t of tasks) if (t.assignee?.gid) assignees.set(t.assignee.gid, t.assignee);
+    const linkUpdates: { id: string; external_id: string }[] = [];
+    const toCreate: { workspace_id: string; name: string; email: string | null; external_source: string; external_id: string }[] = [];
+    for (const a of assignees.values()) {
+      if (memberByGid.has(a.gid)) continue;
+      const existing =
+        (a.email ? memberByEmail.get(a.email.toLowerCase()) : undefined) ?? memberByName.get(a.name.trim().toLowerCase());
+      if (existing && !existing.external_id) {
+        linkUpdates.push({ id: existing.id, external_id: a.gid });
+        memberByGid.set(a.gid, existing);
+      } else {
+        toCreate.push({
+          workspace_id: caller.workspaceId,
+          name: a.name || a.email || 'Asana user',
+          email: a.email?.toLowerCase() ?? null,
+          external_source: 'asana',
+          external_id: a.gid,
+        });
+      }
+    }
+    for (const u of linkUpdates) {
+      await supabase.from('team_members').update({ external_source: 'asana', external_id: u.external_id }).eq('id', u.id);
+    }
+    let membersCreated = 0;
+    if (toCreate.length > 0) {
+      const { data: created, error: createError } = await supabase
+        .from('team_members')
+        .upsert(toCreate, { onConflict: 'workspace_id,external_source,external_id' })
+        .select('id, name, email, profile_id, external_id');
+      if (createError) return json({ error: `Could not create team members: ${createError.message}` }, 500);
+      membersCreated = created?.length ?? 0;
+      for (const m of (created ?? []) as TeamRow[]) if (m.external_id) memberByGid.set(m.external_id, m);
+    }
+
+    const existingByGid = new Map(existingRows.map((r) => [r.external_id, r]));
+    const moduleCatalog = moduleRows.map((m) => ({ name: m.name, aliases: m.aliases ?? [] }));
+    const knownModules = new Set(moduleRows.map((m) => m.name.toLowerCase()));
+    const newModules = new Set<string>();
+
     const rows = tasks.map((t) => {
+      const existing = existingByGid.get(t.gid);
+      const locked = new Set(existing?.locked_fields ?? []);
       let board_status: string | undefined;
       let priority: string | undefined;
       let type: string | undefined;
@@ -188,7 +324,20 @@ Deno.serve(async (req) => {
       }
       // No mapping matched (or none configured) — fall back to the only
       // universal signal Asana gives every task for free.
-      if (!board_status) board_status = t.completed ? 'released' : 'triaged';
+      // Same-name auto-mapping (see FIELD_NAMES): the Asana section / a
+      // "Status" field, a "Priority" field, a "Type" field.
+      const section = t.memberships?.[0]?.section?.name;
+      const inArchivedSection = !!section && ARCHIVED_SECTION.test(section.trim());
+      if (!board_status && t.completed) board_status = 'released';
+      if (!board_status) {
+        board_status = statusFrom(namedField(t, 'status')?.enum_value?.name) ?? (inArchivedSection ? undefined : statusFrom(section));
+      }
+      if (!board_status) board_status = 'triaged';
+      if (!priority) priority = priorityFrom(namedField(t, 'priority')?.enum_value?.name ?? namedField(t, 'priority')?.display_value ?? undefined);
+      if (!type) type = typeFrom(namedField(t, 'type')?.enum_value?.name ?? namedField(t, 'type')?.display_value ?? undefined);
+      // No field gave a type — read it from the title/body; a hand-edited type is kept.
+      if (locked.has('type') && existing) type = existing.type;
+      else if (!type) type = detectType(t.name, t.notes ?? '') ?? undefined;
 
       const extras = descriptionMappings
         .map((m) => {
@@ -207,17 +356,28 @@ Deno.serve(async (req) => {
         if (val) custom_fields[m.custom_field_def_id as string] = val;
       }
 
-      const assigneeEmail = t.assignee?.email?.toLowerCase();
-      const assignee_id = assigneeEmail ? (profileByEmail.get(assigneeEmail) ?? null) : null;
-      const external_assignee_name = !assignee_id && t.assignee ? t.assignee.name : null;
+      const member = t.assignee?.gid ? memberByGid.get(t.assignee.gid) : undefined;
+      const assignee_member_id = member?.id ?? null;
+      const assignee_id = member?.profile_id ?? null;
+      // Only a fallback label now — members are created for every assignee.
+      const external_assignee_name = !member && t.assignee ? t.assignee.name : null;
 
-      const estimatedRaw = lastMappedValue(t, estimatedHoursMappings);
+      const estimatedRaw = lastMappedValue(t, estimatedHoursMappings) ?? namedField(t, 'estimated')?.display_value ?? undefined;
       const estimatedNum = estimatedRaw ? Number(estimatedRaw.replace(/[^0-9.]/g, '')) : NaN;
       const estimated_hours = Number.isFinite(estimatedNum) ? estimatedNum : null;
-      const customer_name = lastMappedValue(t, customerNameMappings) ?? null;
-      const module = lastMappedValue(t, moduleMappings) ?? null;
+      const customer_name = lastMappedValue(t, customerNameMappings) ?? namedField(t, 'customer')?.display_value ?? null;
+      let module: string | null =
+        lastMappedValue(t, moduleMappings) ??
+        namedField(t, 'module')?.enum_value?.name ??
+        namedField(t, 'module')?.display_value ??
+        detectModule(t.name, t.notes ?? '', moduleCatalog);
+      if (locked.has('module') && existing) module = existing.module;
+      if (module && !knownModules.has(module.toLowerCase())) newModules.add(module);
+      // Asana's own tags carry over when no mapping says otherwise.
       const tagsRaw = lastMappedValue(t, tagsMappings);
-      const tags = tagsRaw ? tagsRaw.split(',').map((x) => x.trim()).filter(Boolean) : [];
+      const tags = tagsRaw
+        ? tagsRaw.split(',').map((x) => x.trim()).filter(Boolean)
+        : (t.tags ?? []).map((x) => x.name);
 
       return {
         workspace_id: caller.workspaceId,
@@ -232,7 +392,11 @@ Deno.serve(async (req) => {
         tags,
         priority: priority ?? 'medium',
         assignee_id,
+        assignee_member_id,
         external_assignee_name,
+        // The real Asana creation date — not the moment it was imported here.
+        created_at: t.created_at ?? existing?.created_at ?? new Date().toISOString(),
+        archived_at: inArchivedSection ? (existing?.archived_at ?? new Date().toISOString()) : null,
         custom_fields,
         external_source: 'asana',
         external_id: t.gid,
@@ -252,6 +416,16 @@ Deno.serve(async (req) => {
       if (upsertError) return json({ error: upsertError.message }, 500);
       imported = data?.length ?? 0;
       itemIdByTaskGid = new Map((data ?? []).map((r: { id: string; external_id: string }) => [r.external_id, r.id]));
+    }
+
+    // Modules seen on these tasks (mapped from Asana or detected) join the catalog.
+    if (newModules.size > 0) {
+      await supabase
+        .from('modules')
+        .upsert([...newModules].map((name) => ({ workspace_id: caller.workspaceId, name })), {
+          onConflict: 'workspace_id,name',
+          ignoreDuplicates: true,
+        });
     }
 
     // Comments — one API call per task, bounded concurrency to stay under
@@ -294,7 +468,7 @@ Deno.serve(async (req) => {
       .update({ last_synced_at: new Date().toISOString() })
       .eq('id', project.id);
 
-    return json({ imported, total: tasks.length, commentsImported });
+    return json({ imported, total: tasks.length, commentsImported, membersCreated });
   } catch (e) {
     return json({ error: String(e instanceof Error ? e.message : e) }, 502);
   }

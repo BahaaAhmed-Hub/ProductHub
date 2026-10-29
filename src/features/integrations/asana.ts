@@ -356,10 +356,14 @@ export function useAsanaActions() {
       if (error) throw error;
       await invalidate();
     },
-    async sync(projectGid: string): Promise<{ imported: number; total: number; commentsImported: number }> {
-      const result = await invoke<{ imported: number; total: number; commentsImported: number }>('asana-sync', { projectGid });
+    async sync(projectGid: string): Promise<{ imported: number; total: number; commentsImported: number; membersCreated: number }> {
+      const result = await invoke<{ imported: number; total: number; commentsImported: number; membersCreated: number }>('asana-sync', { projectGid });
       await invalidate();
-      await qc.invalidateQueries({ queryKey: ['board'] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['board'] }),
+        qc.invalidateQueries({ queryKey: ['roster'] }),
+        qc.invalidateQueries({ queryKey: ['modules'] }),
+      ]);
       return result;
     },
     async disconnect() {
