@@ -64,17 +64,20 @@ interface Filters {
   createdTo: string;
   // Archived tasks are hidden unless this is on, which shows only them.
   archived: boolean;
+  // Hide tasks already completed (status Released).
+  hideCompleted: boolean;
 }
 const EMPTY_FILTERS: Filters = {
-  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), createdFrom: '', createdTo: '', archived: false,
+  types: new Set(), priorities: new Set(), plans: new Set(), assigneeIds: new Set(), createdFrom: '', createdTo: '', archived: false, hideCompleted: false,
 };
 
 function filterCount(f: Filters): number {
-  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.createdFrom ? 1 : 0) + (f.createdTo ? 1 : 0) + (f.archived ? 1 : 0);
+  return f.types.size + f.priorities.size + f.plans.size + f.assigneeIds.size + (f.createdFrom ? 1 : 0) + (f.createdTo ? 1 : 0) + (f.archived ? 1 : 0) + (f.hideCompleted ? 1 : 0);
 }
 
 function matchesFilters(item: BoardItem, f: Filters): boolean {
   if (f.archived !== Boolean(item.archivedAt)) return false;
+  if (f.hideCompleted && item.boardStatus === 'released') return false;
   if (f.types.size > 0 && !f.types.has(item.type)) return false;
   if (f.priorities.size > 0 && !f.priorities.has(item.priority)) return false;
   if (f.plans.size > 0 && !f.plans.has(item.planBucket ?? '')) return false;
@@ -387,6 +390,12 @@ function FilterPopover({
               className="h-7 px-2 rounded-control border border-hairline bg-surface text-[12px] text-ink"
             />
           </label>
+        </FilterSection>
+
+        <FilterSection label="Completed">
+          <FilterChip active={filters.hideCompleted} onClick={() => onChange({ ...filters, hideCompleted: !filters.hideCompleted })}>
+            Hide completed tasks
+          </FilterChip>
         </FilterSection>
 
         <FilterSection label="Archive">

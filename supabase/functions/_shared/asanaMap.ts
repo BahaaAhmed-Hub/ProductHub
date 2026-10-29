@@ -46,5 +46,7 @@ export function statusFrom(v: string | undefined): string | undefined {
   if (/\b(backlog|todo|to do|new|open|triage|triaged|planned|not started|inbox)\b/.test(x)) return 'triaged';
   return undefined;
 }
+/** A section/column that means "finished" — tasks in it are completed here regardless of field mappings. */
+export const COMPLETED_SECTION = /^(done|completed?|closed|resolved|finished|shipped|released)$/i;
 export const ARCHIVED_SECTION = /^archived?$/i;
 

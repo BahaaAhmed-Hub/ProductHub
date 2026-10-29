@@ -22,7 +22,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { authedClient, requireManager } from '../_shared/authedClient.ts';
 import { asanaFetchAllPages, ensureFreshToken, mapConcurrent } from '../_shared/asana.ts';
 import { detectModule, detectType } from '../_shared/detect.ts';
-import { ARCHIVED_SECTION, namedField, priorityFrom, statusFrom, typeFrom } from '../_shared/asanaMap.ts';
+import { ARCHIVED_SECTION, COMPLETED_SECTION, namedField, priorityFrom, statusFrom, typeFrom } from '../_shared/asanaMap.ts';
 
 interface AsanaCustomFieldValue {
   gid: string;
@@ -282,6 +282,8 @@ Deno.serve(async (req) => {
       // "Status" field, a "Priority" field, a "Type" field.
       const section = t.memberships?.[0]?.section?.name;
       const inArchivedSection = !!section && ARCHIVED_SECTION.test(section.trim());
+      // A task sitting in a "Completed"/"Done" column is completed here, whatever the mappings say.
+      if (section && COMPLETED_SECTION.test(section.trim())) board_status = 'released';
       if (!board_status && t.completed) board_status = 'released';
       if (!board_status) {
         board_status = statusFrom(namedField(t.custom_fields, 'status')?.enum_value?.name) ?? (inArchivedSection ? undefined : statusFrom(section));
