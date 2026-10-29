@@ -1,6 +1,8 @@
 import { TopNav } from '@/components/layout/TopNav';
 import { KPITile } from '@/components/ui/KPITile';
 import { PriorityTag } from '@/components/ui/Tag';
+import { SortHeader } from '@/components/ui/SortHeader';
+import { useSort } from '@/lib/useSort';
 import { useBoardItems } from '@/features/board/hooks';
 import { useItemPanel } from '@/features/board/panelStore';
 import type { BoardStatus, Priority } from '@/types/domain';
@@ -33,6 +35,16 @@ export function MySLAScreen() {
   const { items } = useBoardItems();
 
   const withSla = items.map((item) => ({ item, sla: slaFor(item) }));
+  const SLA_RANK = { breach: 0, risk: 1, ok: 2, met: 3 } as const;
+  const STATUS_ORDER: BoardStatus[] = ['triaged', 'in_development', 'in_qa', 'released'];
+  const PRIORITY_RANK: Record<Priority, number> = { low: 0, medium: 1, high: 2, critical: 3 };
+  const { sorted, sort, toggle: onSort } = useSort(withSla, {
+    ref: (x: (typeof withSla)[number]) => x.item.ref,
+    title: (x) => x.item.title,
+    status: (x) => STATUS_ORDER.indexOf(x.item.boardStatus),
+    priority: (x) => PRIORITY_RANK[x.item.priority],
+    sla: (x) => SLA_RANK[x.sla.kind],
+  });
   const atRisk = withSla.filter((x) => x.sla.kind === 'risk' || x.sla.kind === 'breach').length;
   const withinSla = withSla.filter((x) => x.sla.kind === 'ok' || x.sla.kind === 'met').length;
   const resolvedToday = items.filter((i) => i.boardStatus === 'released').length;
@@ -58,11 +70,14 @@ export function MySLAScreen() {
 
         <div className="mt-5 bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame overflow-hidden">
           <div className="grid grid-cols-[92px_1fr_110px_100px_130px] gap-3 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
-            <span>Ref</span><span>Title</span><span>Status</span><span>Priority</span>
-            <span className="text-right">SLA</span>
+            <SortHeader label="Ref" sortKey="ref" sort={sort} onSort={onSort} />
+            <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} />
+            <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} />
+            <SortHeader label="Priority" sortKey="priority" sort={sort} onSort={onSort} />
+            <SortHeader label="SLA" sortKey="sla" sort={sort} onSort={onSort} align="right" />
           </div>
           {items.length === 0 && <div className="py-10 text-center text-sm text-body">No assigned items yet.</div>}
-          {withSla.map(({ item, sla }) => {
+          {sorted.map(({ item, sla }) => {
             const st = STATUS_LABEL[item.boardStatus];
             return (
               <div

@@ -7,7 +7,7 @@ import {
   TrendingDown, SquareKanban, Columns3, Circle, Eye, EyeOff, ArrowUpRight, Copy,
   Link2, Rocket, Building2, HourglassIcon, CircleCheck, CreditCard,
   Settings, Mail, Send, BarChart3, PieChart, Hash, WandSparkles,
-  LayoutGrid, CornerDownRight, Pencil, Trash2, ArchiveRestore, RefreshCw, FolderInput,
+  ArrowUp, ArrowDown, ChevronsUpDown, LayoutGrid, CornerDownRight, Pencil, Trash2, ArchiveRestore, RefreshCw, FolderInput,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -86,6 +86,9 @@ const MAP: Record<string, LucideIcon> = {
   radio_button_unchecked: Circle,
   sync: RefreshCw,
   drive_file_move: FolderInput,
+  arrow_upward: ArrowUp,
+  arrow_downward: ArrowDown,
+  unfold_more: ChevronsUpDown,
 };
 
 interface IconProps {

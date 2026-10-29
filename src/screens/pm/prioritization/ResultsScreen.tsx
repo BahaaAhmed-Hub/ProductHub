@@ -2,6 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { TopNav } from '@/components/layout/TopNav';
 import { Icon } from '@/components/ui/Icon';
 import { TypeTag } from '@/components/ui/Tag';
+import { SortHeader } from '@/components/ui/SortHeader';
+import { useSort } from '@/lib/useSort';
 import { useBoardItems } from '@/features/board/hooks';
 import { useItemPanel } from '@/features/board/panelStore';
 import type { BoardItem } from '@/features/board/types';
@@ -25,7 +27,17 @@ export function ResultsScreen() {
       const wr = wsjfRank.get(item.id) ?? items.length;
       return { item, rr, wr, blended: (rr + wr) / 2 };
     })
-    .sort((a, b) => a.blended - b.blended);
+    .sort((a, b) => a.blended - b.blended)
+    .map((r, idx) => ({ ...r, rank: idx + 1 }));
+  const { sorted, sort, toggle: onSort } = useSort(rows, {
+    rank: (r: (typeof rows)[number]) => r.rank,
+    ref: (r) => r.item.ref,
+    title: (r) => r.item.title,
+    type: (r) => r.item.type,
+    rice: (r) => r.rr,
+    wsjf: (r) => r.wr,
+    blend: (r) => r.blended,
+  });
 
   return (
     <>
@@ -44,16 +56,21 @@ export function ResultsScreen() {
         ) : (
           <div className="bg-surface border-[0.5px] border-hairline rounded-frame shadow-frame overflow-hidden max-w-4xl">
             <div className="grid grid-cols-[50px_92px_1fr_84px_80px_80px_80px] gap-2 px-4 py-2.5 text-eyebrow font-medium uppercase text-label border-b-[0.5px] border-hairline">
-              <span>Rank</span><span>Ref</span><span>Title</span><span>Type</span>
-              <span className="text-right">RICE #</span><span className="text-right">WSJF #</span><span className="text-right">Blend</span>
+              <SortHeader label="Rank" sortKey="rank" sort={sort} onSort={onSort} />
+              <SortHeader label="Ref" sortKey="ref" sort={sort} onSort={onSort} />
+              <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} />
+              <SortHeader label="Type" sortKey="type" sort={sort} onSort={onSort} />
+              <SortHeader label="RICE #" sortKey="rice" sort={sort} onSort={onSort} align="right" />
+              <SortHeader label="WSJF #" sortKey="wsjf" sort={sort} onSort={onSort} align="right" />
+              <SortHeader label="Blend" sortKey="blend" sort={sort} onSort={onSort} align="right" />
             </div>
-            {rows.map(({ item, rr, wr, blended }, idx) => (
+            {sorted.map(({ item, rr, wr, blended, rank }) => (
               <div
                 key={item.id}
                 onClick={() => openItem(item.id)}
                 className="grid grid-cols-[50px_92px_1fr_84px_80px_80px_80px] gap-2 items-center px-4 h-12 border-b-[0.5px] border-hairline last:border-0 cursor-pointer hover:bg-[#F7F7F5]"
               >
-                <span className={`text-[15px] font-semibold ${idx === 0 ? 'text-success' : 'text-ink'}`}>{idx + 1}</span>
+                <span className={`text-[15px] font-semibold ${rank === 1 ? 'text-success' : 'text-ink'}`}>{rank}</span>
                 <span className="font-mono text-[11px] text-label">{item.ref}</span>
                 <span className="text-[13px] font-medium truncate">{item.title}</span>
                 <span><TypeTag type={item.type} /></span>
