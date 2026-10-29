@@ -33,6 +33,7 @@ interface ItemRow {
   external_assignee_name: string | null;
   external_source: string | null;
   archived_at: string | null;
+  dirty_since: string | null;
   locked_fields: string[] | null;
   custom_fields: Record<string, string> | null;
   estimated_hours: number | null;
@@ -42,7 +43,7 @@ interface ItemRow {
 }
 
 const ITEM_SELECT =
-  'id, ref, title, description, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee_id, assignee_member_id, external_assignee_name, external_source, archived_at, locked_fields, custom_fields, estimated_hours, customer_name, module, tags, assignee:team_members!backlog_items_assignee_member_id_fkey(name)';
+  'id, ref, title, description, type, board_status, priority, source_request_id, rice_score, wsjf_score, effort, score_inputs, swimlane, release_id, plan_bucket, created_at, assignee_id, assignee_member_id, external_assignee_name, external_source, archived_at, dirty_since, locked_fields, custom_fields, estimated_hours, customer_name, module, tags, assignee:team_members!backlog_items_assignee_member_id_fkey(name)';
 
 export async function listBoardItems(): Promise<BoardItem[]> {
   const [{ data, error }, { data: defs, error: defsError }] = await Promise.all([
@@ -87,6 +88,7 @@ export async function listBoardItems(): Promise<BoardItem[]> {
     ...(r.tags && r.tags.length > 0 ? { tags: r.tags } : {}),
     ...(r.external_source ? { externalSource: r.external_source } : {}),
     ...(r.archived_at ? { archivedAt: r.archived_at } : {}),
+    ...(r.dirty_since ? { dirtySince: r.dirty_since } : {}),
     ...(r.locked_fields && r.locked_fields.length > 0 ? { lockedFields: r.locked_fields } : {}),
   }));
 }
@@ -159,6 +161,18 @@ export async function bulkAssign(ids: string[], memberId: string | null, profile
     .from('backlog_items')
     .update({ assignee_member_id: memberId, assignee_id: profileId, external_assignee_name: null })
     .in('id', ids);
+  if (error) throw error;
+}
+
+/** Move tasks to a module (null = none); recorded as a hand edit server-side (set_items_module). */
+export async function bulkSetModule(ids: string[], module: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_items_module', { item_ids: ids, new_module: module });
+  if (error) throw error;
+}
+
+/** Mark synced items as in step with Asana (after a write that already went there). */
+export async function clearDirty(ids: string[]): Promise<void> {
+  const { error } = await supabase.from('backlog_items').update({ dirty_since: null }).in('id', ids);
   if (error) throw error;
 }
 

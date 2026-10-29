@@ -11,6 +11,7 @@ import { useAssigneeRoster } from '@/features/team';
 import { useModules } from '@/features/modules';
 import { detectModule, detectType } from '@/features/board/detect';
 import { classifyItems } from '@/features/ai';
+import { useAsanaConnection, pushToAsana, summarizePush } from '@/features/integrations/asana';
 import type { BoardItem, ItemNote } from '@/features/board/types';
 import type { RequestType } from '@/types/domain';
 
@@ -82,6 +83,7 @@ export function ItemDetailBody({ itemId, onClose }: { itemId: string; onClose: (
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           <PriorityTag priority={item.priority} />
           <Tag tone="pm">{statusLabel}</Tag>
+          <AsanaSyncButton item={item} />
           {slaLabel(item.createdAt, item.priority, isReleased) && (
             <span className="inline-flex items-center gap-1 text-[11px] text-[#9A6410] font-mono">
               <Icon name="schedule" size={13} /> {slaLabel(item.createdAt, item.priority, isReleased)}
@@ -166,6 +168,51 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
       <Eyebrow>{label}</Eyebrow>
       <div className="text-[13px]">{value}</div>
     </div>
+  );
+}
+
+/** Manual "sync this task to Asana" — shown for synced tasks when automatic
+ * sync is off (when it's on, every edit is pushed and logged on its own). */
+function AsanaSyncButton({ item }: { item: BoardItem }) {
+  const { connection } = useAsanaConnection();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  if (item.externalSource !== 'asana') return null;
+  if (connection.autoPush) {
+    return <span className="text-[11px] text-label inline-flex items-center gap-1"><Icon name="sync" size={13} /> Auto-syncing to Asana</span>;
+  }
+
+  async function run() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const results = await pushToAsana([item.id]);
+      setMessage({ text: summarizePush(results), ok: results.every((r) => r.status === 'ok') });
+    } catch (e) {
+      setMessage({ text: e instanceof Error ? e.message : 'Sync to Asana failed.', ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        title={item.dirtySince ? 'Changed here since the last sync — push to Asana' : 'Push this task to Asana'}
+        aria-label="Sync to Asana"
+        className={clsx(
+          'relative inline-flex items-center gap-1 h-6 px-2 rounded-full border text-[11px] font-medium disabled:opacity-50',
+          item.dirtySince ? 'border-accent text-accent' : 'border-hairline text-label hover:text-body',
+        )}
+      >
+        <Icon name="sync" size={13} className={busy ? 'animate-spin' : undefined} />
+        {busy ? 'Syncing…' : item.dirtySince ? 'Sync to Asana' : 'Synced'}
+      </button>
+      {message && <span className={clsx('text-[11px]', message.ok ? 'text-success' : 'text-danger')}>{message.text}</span>}
+    </span>
   );
 }
 

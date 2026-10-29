@@ -2,11 +2,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { invoke } from '@/lib/edgeFunctions';
+import { useAsanaConnection, pushToAsana } from '@/features/integrations/asana';
 import type { BoardStatus } from '@/types/domain';
 import { useBoardStore } from './store';
 import {
   addRequestToBoard, listBoardItems, listTriageRequests, updateBoardStatus, updateRiceScore, updateItemFields,
-  listItemNotes, addItemNote, createBoardItem, bulkUpdateBoardStatus, bulkAssign, bulkDeleteItems, bulkSetArchived,
+  listItemNotes, addItemNote, createBoardItem, bulkUpdateBoardStatus, bulkAssign, bulkDeleteItems, bulkSetArchived, bulkSetModule, clearDirty,
   type NewItemDraft,
 } from './api';
 import type { BoardItem, ItemNote, TriageRequest } from './types';
@@ -39,6 +40,23 @@ export function useBoardItems(opts: { includeArchived?: boolean } = {}): { items
   return { items, isLoading: isSupabaseConfigured ? q.isLoading : false };
 }
 
+/** Fields whose local edits are written back to Asana (see asana-push). */
+const PUSH_KEYS = new Set(['type', 'priority', 'boardStatus', 'module', 'customerName', 'estimatedHours', 'title']);
+
+/** Returns a function that, when "automatically sync changes to Asana" is on,
+ * pushes the given synced items in the background. Failures land in the sync
+ * log (the function records every attempt), so they're not thrown here. */
+export function useAutoPush() {
+  const qc = useQueryClient();
+  const { connection } = useAsanaConnection();
+  return (ids: string[]): void => {
+    if (!isSupabaseConfigured || !connection.autoPush) return;
+    const known = qc.getQueryData<BoardItem[]>(['board']) ?? [];
+    const synced = ids.filter((id) => known.find((i) => i.id === id)?.externalSource === 'asana');
+    if (synced.length > 0) void pushToAsana(synced).catch(() => undefined);
+  };
+}
+
 export function useMoveItem() {
   const qc = useQueryClient();
   const mockMove = useBoardStore((s) => s.moveItem);
@@ -67,6 +85,7 @@ export function useUpdateRice() {
 
 export function useUpdateItem() {
   const qc = useQueryClient();
+  const autoPush = useAutoPush();
   const patch = useBoardStore((s) => s.patch);
   // Record<keyof BoardItem, unknown>, not Partial<BoardItem> — callers need
   // to pass an explicit null to clear a field back to empty (e.g. blurring
@@ -79,6 +98,7 @@ export function useUpdateItem() {
       for (const [k, v] of Object.entries(fields)) dbFields[COLMAP[k] ?? k] = v;
       await updateItemFields(id, dbFields);
       await qc.invalidateQueries({ queryKey: ['board'] });
+      if (Object.keys(fields).some((k) => PUSH_KEYS.has(k))) autoPush([id]);
       return;
     }
     patch(id, fields as Partial<BoardItem>);
@@ -95,6 +115,7 @@ type AsanaAction = 'complete' | 'reopen' | 'archive' | 'unarchive';
  * sides never disagree. */
 export function useBulkActions() {
   const qc = useQueryClient();
+  const autoPush = useAutoPush();
   const mockMove = useBoardStore((s) => s.moveItem);
   const mockDelete = useBoardStore((s) => s.deleteItems);
   const mockAssign = useBoardStore((s) => s.bulkAssign);
@@ -136,13 +157,23 @@ export function useBulkActions() {
 
   return {
     complete: (ids: string[]) =>
-      viaAsana('complete', ids, (ok) => bulkUpdateBoardStatus(ok, 'released'), (id) => mockMove(id, 'released')),
+      viaAsana('complete', ids, async (ok) => { await bulkUpdateBoardStatus(ok, 'released'); await clearDirty(ok); }, (id) => mockMove(id, 'released')),
     reopen: (ids: string[]) =>
-      viaAsana('reopen', ids, (ok) => bulkUpdateBoardStatus(ok, 'triaged'), (id) => mockMove(id, 'triaged')),
+      viaAsana('reopen', ids, async (ok) => { await bulkUpdateBoardStatus(ok, 'triaged'); await clearDirty(ok); }, (id) => mockMove(id, 'triaged')),
     archive: (ids: string[]) =>
       viaAsana('archive', ids, (ok) => bulkSetArchived(ok, true), (id) => mockPatch(id, { archivedAt: new Date().toISOString() })),
     restore: (ids: string[]) =>
       viaAsana('unarchive', ids, (ok) => bulkSetArchived(ok, false), (id) => mockPatch(id, { archivedAt: undefined })),
+    /** Move tasks to another module (null = none) and, with auto-sync on, push the change to Asana. */
+    async setModule(ids: string[], module: string | null): Promise<void> {
+      if (isSupabaseConfigured) {
+        await bulkSetModule(ids, module);
+        await invalidate();
+        autoPush(ids);
+        return;
+      }
+      ids.forEach((id) => mockPatch(id, module ? { module } : { module: undefined }));
+    },
     async remove(ids: string[]): Promise<void> {
       if (isSupabaseConfigured) {
         await bulkDeleteItems(ids);
@@ -158,6 +189,7 @@ export function useBulkActions() {
       if (isSupabaseConfigured) {
         await bulkAssign(ids, assignee?.id ?? null, assignee?.profileId ?? null);
         await invalidate();
+        autoPush(ids);
         return;
       }
       mockAssign(ids, assignee);

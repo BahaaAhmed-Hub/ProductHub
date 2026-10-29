@@ -27,6 +27,7 @@ export interface BoardItem {
   tags?: string[];
   externalSource?: string; // 'asana' for synced items
   archivedAt?: string;
+  dirtySince?: string; // synced item edited locally and not yet pushed to Asana
   lockedFields?: string[]; // fields edited by hand ('type', 'module') — sync/detection leave them alone
 }
 
